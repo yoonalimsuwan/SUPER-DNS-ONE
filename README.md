@@ -9,6 +9,7 @@
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20007526-blue)](https://doi.org/10.5281/zenodo.20007526)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19814975-blue)](https://doi.org/10.5281/zenodo.19814975)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20194882-blue)](https://doi.org/10.5281/zenodo.20194882)
+[![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20283663-blue)](https://doi.org/10.5281/zenodo.20283663)
 
 SUPER DNS ONE is a fully differentiable, three‑dimensional Direct Numerical
 Simulation (DNS) engine that solves the compressible Navier–Stokes equations
@@ -209,7 +210,7 @@ If you use this software in your research, please cite:
 
 ```
 Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation."
-Zenodo, 2026. DOI: 10.5281/zenodo.XXXXXXX
+Zenodo, 2026. DOI: 10.5281/zenodo.20283663
 ```
 
 ---
