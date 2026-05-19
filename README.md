@@ -163,6 +163,40 @@ This software must not be used for the design, testing, or operation of
 weapons, military vehicles, or any form of armed conflict.  The author
 disclaims all liability for any such misuse.
 
+### AI Integration – Toward O(1) Complexity
+
+Because SUPER DNS ONE is written entirely in PyTorch and every operation—the
+SOC kernel, SSC filter, RG smoothing, Itô forcing, and the Riemann solvers—is
+**fully differentiable**, the solver can be directly embedded in a deep-learning
+workflow.  This opens the door to training AI surrogate models that reproduce
+the physics of the DNS at a tiny fraction of the cost.
+
+**How the training works**
+
+1. **Generate training data** – Run the SOC‑controlled DNS on a variety of
+   initial conditions, Mach numbers, and Reynolds numbers.  At each time step
+   (or every few steps), store the flow fields together with the SOC stress
+   and the SSC contraction signal.
+2. **Build a neural surrogate** – Train a 3D convolutional or
+   SE(3)‑equivariant graph network to predict the next time step
+   *directly* from the current fields, bypassing the iterative solution of
+   the Navier–Stokes equations.
+3. **Physics‑informed loss** – Because the solver is differentiable, the
+   surrogate can also be trained using a **physics‑informed loss** that
+   evaluates the residual of the compressible Navier–Stokes equations,
+   guaranteeing that the predicted fields respect conservation laws.
+4. **Inference** – Once trained, the neural network predicts one time step
+   (or even a full turbulent trajectory) in a **single forward pass**,
+   independently of the grid size.  The computational cost becomes
+   **O(1)** with respect to the number of degrees of freedom, enabling
+   real‑time medical flow visualisation, rapid weather ensemble forecasts,
+   and interactive aerodynamic design.
+
+The differentiability of SUPER DNS ONE ensures that gradients can flow
+seamlessly from the physics loss into the surrogate network, creating a
+self‑improving loop that continuously narrows the gap between classical
+DNS and AI‑driven prediction.
+
 ---
 
 Citing SUPER DNS ONE
