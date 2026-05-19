@@ -76,7 +76,7 @@ scales to multi‑GPU clusters and supercomputers without code changes.
 ## Installation
 
 ```bash
-git clone https://github.com/your-username/super-dns-one.git
+git clone https://github.com/yoonalimsuwan/SUPER-DNS-ONE.git
 cd super-dns-one
 
 # Create and activate a virtual environment (optional)
@@ -220,6 +220,7 @@ details.
 Contact
 
 Yoon A Limsuwan – GitHub
-Project link: https://github.com/your-username/super-dns-one
+Project link: https://github.com/yoonalimsuwan/SUPER-DNS-ONE
+
 
 ```
