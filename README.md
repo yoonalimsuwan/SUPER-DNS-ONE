@@ -1,11 +1,11 @@
-``
-# SUPER DNS ONE
+`
+# 🧬 SUPER DNS ONE
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.XXXXXXX-blue)](https://doi.org/10.5281/zenodo.XXXXXXX) <!-- replace -->
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.XXXXXXX-blue)](https://doi.org/10.5281/zenodo.XXXXXXX)
 
 SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume solver for the compressible Navier–Stokes equations. It is designed for **high‑fidelity civilian research**:
 
@@ -18,9 +18,29 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 
 ---
 
+## 📑 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Command‑Line Arguments](#command‑line-arguments)
+- [Boundary Conditions](#boundary-conditions-non‑periodic)
+- [Sub‑Grid Models in Detail](#sub‑grid-models-in-detail)
+- [Immersed Boundary Method](#immersed-boundary-method)
+- [Validation Suite](#validation-suite)
+- [Distributed Parallelism](#distributed-parallelism)
+- [Architecture & Vendor Neutrality](#architecture--vendor-neutrality)
+- [Roadmap](#roadmap)
+- [Citing](#citing)
+- [License](#license)
+- [Contact](#contact)
+
+---
+
 ## Overview
 
-SUPER DNS ONE solves the unsteady compressible Navier–Stokes equations on a structured Cartesian grid using a conservative finite‑volume formulation. Inviscid fluxes are evaluated with the **AUSM+** or **HLLC** Riemann solvers, combined with **2nd‑order MUSCL reconstruction** (minmod limiter). Time integration uses a low‑storage **3rd‑order TVD Runge–Kutta** scheme.
+SUPER DNS ONE solves the unsteady compressible Navier–Stokes equations on a structured Cartesian grid using a conservative finite‑volume formulation. Inviscid fluxes are evaluated with the **AUSM⁺** or **HLLC** Riemann solvers, combined with **2ⁿᵈ‑order MUSCL reconstruction** (minmod limiter). Time integration uses a low‑storage **3ʳᵈ‑order TVD Runge–Kutta** scheme.
 
 The solver is augmented with a unique set of physics‑aware modules:
 
@@ -37,7 +57,7 @@ The solver is augmented with a unique set of physics‑aware modules:
 
 All models are implemented in pure PyTorch, making the solver **end‑to‑end differentiable** and compatible with **CPU, CUDA, MPS (Apple Silicon), and Ascend NPU** backends.
 
-For grids larger than \(200^3\), the solver supports **multi‑GPU distributed memory parallelism** (domain decomposition along z) using `torch.distributed`.
+For grids larger than 200³, the solver supports **multi‑GPU distributed memory parallelism** (domain decomposition along z) using `torch.distributed`.
 
 ---
 
@@ -45,9 +65,9 @@ For grids larger than \(200^3\), the solver supports **multi‑GPU distributed m
 
 ### Core Numerics
 - 3D compressible Navier–Stokes (conservative finite‑volume)
-- AUSM+ and HLLC Riemann solvers
-- 2nd‑order MUSCL reconstruction (minmod limiter)
-- 3rd‑order TVD Runge–Kutta time integration
+- AUSM⁺ and HLLC Riemann solvers
+- 2ⁿᵈ‑order MUSCL reconstruction (minmod limiter)
+- 3ʳᵈ‑order TVD Runge–Kutta time integration
 - Mixed precision (FP16/FP32) via PyTorch AMP (optional)
 
 ### Turbulence & Sub‑grid Modelling
@@ -216,7 +236,7 @@ werner_wengle Algebraic wall function with temperature. --wall-temp, --wm-A, --w
 moving_wall Specified wall velocity and temperature. --moving-wall-u, --moving-wall-v, --moving-wall-w, --wall-temp
 farfield Characteristic‑based non‑reflecting condition. --farfield-rho, --farfield-u, --farfield-v, --farfield-w, --farfield-p
 
-All non‑periodic BCs include 2nd‑order ghost‑cell treatment.
+All non‑periodic BCs include 2ⁿᵈ‑order ghost‑cell treatment.
 
 ---
 
@@ -224,23 +244,27 @@ Sub‑Grid Models in Detail
 
 SOC (Self‑Organised Criticality)
 
-The eddy viscosity is computed from a kernel \nu_t = (C_s \Delta)^2 S (r) where r = S/\langle S\rangle. The kernel form is:
+The eddy viscosity is computed from a kernel:
 
-f(r) = C_0 \, r^{-\alpha} \exp(-r/\lambda)
+ νₜ = (Cₛ Δ)² S(r) where r = S / ⟨S⟩
 
-with parameters C_0, \lambda, \alpha, \theta, \tau (the last two control stress accumulation and collapse). The kernel is trainable via differential evolution or Optuna.
+The kernel form is:
+
+ f(r) = C₀ · r⁻ᵅ · exp( −r / λ )
+
+with parameters C₀, λ, α, θ, τ (the last two control stress accumulation and collapse). The kernel is trainable via differential evolution or Optuna.
 
 SSC (Semantic‑State Contraction)
 
-A low‑pass filter for the stress field \sigma:
+A low‑pass filter for the stress field σ:
 
-\sigma_{n+1} = \sigma_n + \epsilon\,(S - \sigma_n)
+ σₙ₊₁ = σₙ + ε · (S − σₙ)
 
 It separates fast turbulent fluctuations from slow, large‑scale structures.
 
 Itô Backscatter
 
-Random stresses with amplitude \sim \sqrt{dt} are added to the viscous stress tensor, injecting energy at sub‑grid scales.
+Random stresses with amplitude ∼ √dt are added to the viscous stress tensor, injecting energy at sub‑grid scales.
 
 RG (Renormalisation Group)
 
@@ -259,7 +283,7 @@ Validation Suite
 The solver includes several built‑in diagnostics:
 
 1. Taylor–Green vortex – monitor kinetic energy dissipation rate vs. analytical solution.
-2. Kolmogorov spectrum – compute the energy spectrum E(k) and fit the inertial‑range slope (theoretical –5/3).
+2. Kolmogorov spectrum – compute the energy spectrum E(k) and fit the inertial‑range slope (theoretical −5/3).
 3. Grid convergence test – compute the observed order of accuracy using Richardson extrapolation on successive grid refinements.
 4. BV conservation checks – track maximum divergence, stress balance, and energy history.
 
@@ -269,7 +293,7 @@ Results are logged to the console and can be extended by the user.
 
 Distributed Parallelism
 
-For large grids (>200^3) the solver can be launched with torchrun. Domain decomposition is performed along the z‑axis, and halo exchanges communicate two ghost layers between neighbouring sub‑domains.
+For large grids (>200³) the solver can be launched with torchrun. Domain decomposition is performed along the z‑axis, and halo exchanges communicate two ghost layers between neighbouring sub‑domains.
 
 Example:
 
