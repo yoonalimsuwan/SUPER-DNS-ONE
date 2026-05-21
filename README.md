@@ -18,26 +18,6 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 
 ---
 
-## 📑 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Command‑Line Arguments](#command‑line-arguments)
-- [Boundary Conditions](#boundary-conditions-non‑periodic)
-- [Sub‑Grid Models in Detail](#sub‑grid-models-in-detail)
-- [Immersed Boundary Method](#immersed-boundary-method)
-- [Validation Suite](#validation-suite)
-- [Distributed Parallelism](#distributed-parallelism)
-- [Architecture & Vendor Neutrality](#architecture--vendor-neutrality)
-- [Roadmap](#roadmap)
-- [Citing](#citing)
-- [License](#license)
-- [Contact](#contact)
-
----
-
 ## Overview
 
 SUPER DNS ONE solves the unsteady compressible Navier–Stokes equations on a structured Cartesian grid using a conservative finite‑volume formulation. Inviscid fluxes are evaluated with the **AUSM⁺** or **HLLC** Riemann solvers, combined with **2ⁿᵈ‑order MUSCL reconstruction** (minmod limiter). Time integration uses a low‑storage **3ʳᵈ‑order TVD Runge–Kutta** scheme.
@@ -183,89 +163,132 @@ python super_dns_one.py --help
 
 Command‑Line Arguments
 
-══════════════════════════════════════════════════════════════════════════════
-  COMMAND‑LINE ARGUMENTS
-══════════════════════════════════════════════════════════════════════════════
-
-  Argument              Default     Description
-  ───────────────────── ─────────── ────────────────────────────────────────
-  --nx, --ny, --nz      64          Grid dimensions (total cells). In
-                                    distributed mode, nz is split among GPUs.
-  --Lx, --Ly, --Lz      2π          Domain size in each direction.
-  --Re                  1e4         Reynolds number. Set to 0 for inviscid.
-  --Pr                  0.71        Prandtl number.
-  --gamma               1.4         Ratio of specific heats.
-  --Mach                0.1         Reference Mach number.
-  --cfl                 0.5         CFL number.
-  --steps               500         Number of time steps.
-  --flux                ausm        Riemann solver: ausm or hllc.
-  --muscl               (on)        Enable MUSCL reconstruction.
-  --shock-capturing     (off)       Enable Ducros sensor + artificial
-                                    viscosity.
-  --rg                  (off)       Enable RG spectral truncation.
-  --rg-keep             0.5         Fraction of wavenumbers retained by RG.
-  --ito                 0.0         Noise amplitude for Itô backscatter.
-  --soc-temp            300.0       Base temperature for SOC model.
-  --max-nu-t            0.05        Maximum eddy viscosity.
-  --ssc-epsilon         0.0028      SSC smoothing parameter.
-  --wall-model          (off)       Enable Werner–Wengle wall model.
-  --wm-A, --wm-B        8.3, 1/7    Wall model constants.
-  --bc-{x,y,z}-{min,max} periodic   Boundary condition type. Choices:
-                                    periodic, supersonic_inflow,
-                                    subsonic_outflow, noslip_isothermal,
-                                    werner_wengle, moving_wall, farfield.
-  --inflow-*            (various)   Parameters for supersonic inflow (rho,
-                                    u, v, w, p).
-  --outflow-p           (various)   Back pressure for subsonic outflow.
-  --wall-temp           (various)   Wall temperature for isothermal walls.
-  --farfield-*          (various)   Far‑field primitive state.
-  --moving-wall-*       (various)   Moving wall velocity components.
-  --eos-model           ideal       Equation of state: ideal or real (needs
-                                    CoolProp).
-  --fluid               Air         Fluid name for CoolProp.
-  --ib-mask             None        Path to .npy mask for immersed boundary
-                                    (True = solid).
-  --ib-eta              1e4         Penalisation strength for IB momentum.
-  --ib-T-target         None        Target temperature inside solid.
-  --ib-eta-T            1e4         Penalisation strength for IB energy.
-  --device              cuda        Compute backend: cuda, cpu, mps, ascend.
-  --dtype               float32     Floating point precision.
-  --save-checkpoint     None        Path to save a checkpoint.
-  --load-checkpoint     None        Path to load a checkpoint and resume.
-  --train-soc           (off)       Train SOC kernel parameters.
-  --target-energy       0.1         Target kinetic energy for training.
-  --grid-convergence    (off)       Run grid convergence test.
-  --denoise             (off)       Run denoising demonstration.
-  --denoise-method      ssc         Denoising method: ssc, wiener, wavelet.
-  --distributed         (off)       Enable multi‑GPU distributed mode (use
-                                    with torchrun).
+╔══════════════════════════════════════╤══════════╤══════════════════════════════════════╗
+║ Argument                             │ Default  │ Description                          ║
+╠══════════════════════════════════════╪══════════╪══════════════════════════════════════╣
+║ --nx, --ny, --nz                     │ 64       │ Grid dimensions (total cells). In    ║
+║                                      │          │ distributed mode, nz is split among  ║
+║                                      │          │ GPUs.                               ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --Lx, --Ly, --Lz                     │ 2π       │ Domain size in each direction.       ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --Re                                 │ 1e4      │ Reynolds number. Set to 0 for        ║
+║                                      │          │ inviscid flow.                      ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --Pr                                 │ 0.71     │ Prandtl number.                     ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --gamma                              │ 1.4      │ Ratio of specific heats.             ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --Mach                               │ 0.1      │ Reference Mach number.              ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --cfl                                │ 0.5      │ CFL number.                         ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --steps                              │ 500      │ Number of time steps.               ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --flux                               │ ausm     │ Riemann solver: ausm or hllc.       ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --muscl                              │ (on)     │ Enable MUSCL reconstruction.         ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --shock-capturing                    │ (off)    │ Enable Ducros sensor + artificial    ║
+║                                      │          │ viscosity.                          ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --rg                                 │ (off)    │ Enable RG spectral truncation.      ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --rg-keep                            │ 0.5      │ Fraction of wavenumbers retained.   ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ito                                │ 0.0      │ Noise amplitude for Itô backscatter. ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --soc-temp                           │ 300.0    │ Base temperature for SOC model.      ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --max-nu-t                           │ 0.05     │ Maximum eddy viscosity.              ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ssc-epsilon                        │ 0.0028   │ SSC smoothing parameter.             ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --wall-model                         │ (off)    │ Enable Werner–Wengle wall model.     ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --wm-A, --wm-B                       │ 8.3, 1/7 │ Wall model constants.                ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --bc-{x,y,z}-{min,max}               │ periodic │ Boundary condition type. Choices:    ║
+║                                      │          │ periodic, supersonic_inflow,        ║
+║                                      │          │ subsonic_outflow, noslip_isothermal, ║
+║                                      │          │ werner_wengle, moving_wall, farfield ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --inflow-*                           │ (various)│ Parameters for supersonic inflow     ║
+║                                      │          │ (rho, u, v, w, p).                   ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --outflow-p                          │ (various)│ Back pressure for subsonic outflow.   ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --wall-temp                          │ (various)│ Wall temperature for isothermal walls.║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --farfield-*                         │ (various)│ Far‑field primitive state.            ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --moving-wall-*                      │ (various)│ Moving wall velocity components.      ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --eos-model                          │ ideal    │ Equation of state: ideal or real     ║
+║                                      │          │ (needs CoolProp).                    ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --fluid                              │ Air      │ Fluid name for CoolProp.             ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ib-mask                            │ None     │ Path to .npy mask for immersed       ║
+║                                      │          │ boundary (True = solid).            ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ib-eta                             │ 1e4      │ Penalisation strength for IB momentum.║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ib-T-target                        │ None     │ Target temperature inside solid.     ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --ib-eta-T                           │ 1e4      │ Penalisation strength for IB energy.  ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --device                             │ cuda     │ Compute backend: cuda, cpu, mps,     ║
+║                                      │          │ ascend.                             ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --dtype                              │ float32  │ Floating point precision.            ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --save-checkpoint                    │ None     │ Path to save a checkpoint.           ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --load-checkpoint                    │ None     │ Path to load a checkpoint and resume.║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --train-soc                          │ (off)    │ Train SOC kernel parameters.          ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --target-energy                      │ 0.1      │ Target kinetic energy for training.   ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --grid-convergence                   │ (off)    │ Run grid convergence test.            ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --denoise                            │ (off)    │ Run denoising demonstration.          ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --denoise-method                     │ ssc      │ Denoising method: ssc, wiener,       ║
+║                                      │          │ wavelet.                            ║
+╟──────────────────────────────────────┼──────────┼──────────────────────────────────────╢
+║ --distributed                        │ (off)    │ Enable multi‑GPU distributed mode    ║
+║                                      │          │ (use with torchrun).                 ║
+╚══════════════════════════════════════╧══════════╧══════════════════════════════════════╝
 ---
 
 Boundary Conditions (Non‑Periodic)
 
-══════════════════════════════════════════════════════════════════════════════
-  BOUNDARY CONDITION TYPES
-══════════════════════════════════════════════════════════════════════════════
-
-  Type                  Description
-  ───────────────────── ────────────────────────────────────────────────────
-  supersonic_inflow     Fixed primitive state at boundary.
-                        Requires: --inflow-rho, --inflow-u, --inflow-v,
-                        --inflow-w, --inflow-p
-  subsonic_outflow      Prescribed back pressure, extrapolated velocities.
-                        Requires: --outflow-p
-  noslip_isothermal     Zero velocity, fixed wall temperature.
-                        Requires: --wall-temp
-  werner_wengle         Algebraic wall function with temperature.
-                        Requires: --wall-temp, --wm-A, --wm-B
-  moving_wall           Specified wall velocity and temperature.
-                        Requires: --moving-wall-u, --moving-wall-v,
-                        --moving-wall-w, --wall-temp
-  farfield              Characteristic‑based non‑reflecting condition.
-                        Requires: --farfield-rho, --farfield-u, --farfield-v,
-                        --farfield-w, --farfield-p
-
-  All non‑periodic BCs include 2ⁿᵈ‑order ghost‑cell treatment.
+╔════════════════════════╤════════════════════════════════════════════════════╗
+║ Type                   │ Description & Required Parameters                 ║
+╠════════════════════════╪════════════════════════════════════════════════════╣
+║ supersonic_inflow      │ Fixed primitive state at boundary.                ║
+║                        │   --inflow-rho, --inflow-u, --inflow-v,           ║
+║                        │   --inflow-w, --inflow-p                         ║
+╟────────────────────────┼────────────────────────────────────────────────────╢
+║ subsonic_outflow       │ Prescribed back pressure, extrapolated velocities. ║
+║                        │   --outflow-p                                    ║
+╟────────────────────────┼────────────────────────────────────────────────────╢
+║ noslip_isothermal      │ Zero velocity, fixed wall temperature.             ║
+║                        │   --wall-temp                                    ║
+╟────────────────────────┼────────────────────────────────────────────────────╢
+║ werner_wengle          │ Algebraic wall function with temperature.          ║
+║                        │   --wall-temp, --wm-A, --wm-B                     ║
+╟────────────────────────┼────────────────────────────────────────────────────╢
+║ moving_wall            │ Specified wall velocity and temperature.           ║
+║                        │   --moving-wall-u, --moving-wall-v,               ║
+║                        │   --moving-wall-w, --wall-temp                    ║
+╟────────────────────────┼────────────────────────────────────────────────────╢
+║ farfield               │ Characteristic‑based non‑reflecting condition.     ║
+║                        │   --farfield-rho, --farfield-u, --farfield-v,     ║
+║                        │   --farfield-w, --farfield-p                      ║
+╚════════════════════════╧════════════════════════════════════════════════════╝
 
 All non‑periodic BCs include 2ⁿᵈ‑order ghost‑cell treatment.
 
