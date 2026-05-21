@@ -1,4 +1,4 @@
-`
+``
 # 🧬 SUPER DNS ONE
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
@@ -15,6 +15,26 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 - **Hypersonic civilian transport** – real‑gas effects, shock capturing, high‑speed boundary‑layer transition.
 
 **This software is not intended, tested, or authorised for military applications, weapons development, or any form of armed conflict.**
+
+---
+
+## 📑 Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Command‑Line Arguments](#command‑line-arguments)
+- [Boundary Conditions](#boundary-conditions-non‑periodic)
+- [Sub‑Grid Models in Detail](#sub‑grid-models-in-detail)
+- [Immersed Boundary Method](#immersed-boundary-method)
+- [Validation Suite](#validation-suite)
+- [Distributed Parallelism](#distributed-parallelism)
+- [Architecture & Vendor Neutrality](#architecture--vendor-neutrality)
+- [Roadmap](#roadmap)
+- [Citing](#citing)
+- [License](#license)
+- [Contact](#contact)
 
 ---
 
