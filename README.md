@@ -18,26 +18,6 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 
 ---
 
-## 📑 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Command‑Line Arguments](#command‑line-arguments)
-- [Boundary Conditions](#boundary-conditions-non‑periodic)
-- [Sub‑Grid Models in Detail](#sub‑grid-models-in-detail)
-- [Immersed Boundary Method](#immersed-boundary-method)
-- [Validation Suite](#validation-suite)
-- [Distributed Parallelism](#distributed-parallelism)
-- [Architecture & Vendor Neutrality](#architecture--vendor-neutrality)
-- [Roadmap](#roadmap)
-- [Citing](#citing)
-- [License](#license)
-- [Contact](#contact)
-
----
-
 ## Overview
 
 SUPER DNS ONE solves the unsteady compressible Navier–Stokes equations on a structured Cartesian grid using a conservative finite‑volume formulation. Inviscid fluxes are evaluated with the **AUSM⁺** or **HLLC** Riemann solvers, combined with **2ⁿᵈ‑order MUSCL reconstruction** (minmod limiter). Time integration uses a low‑storage **3ʳᵈ‑order TVD Runge–Kutta** scheme.
