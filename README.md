@@ -1,83 +1,93 @@
-`
+``
 # SUPER DNS ONE
 
-**SOC‑Controlled Direct Numerical Simulation for Peaceful Applications**
+**Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20283663-blue)](https://doi.org/10.5281/zenodo.20283663) <!-- replace with actual DOI when available -->
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.XXXXXXX-blue)](https://doi.org/10.5281/zenodo.XXXXXXX) <!-- replace -->
 
-SUPER DNS ONE is a fully differentiable, three‑dimensional Direct Numerical
-Simulation (DNS) engine that solves the compressible Navier–Stokes equations
-on structured Cartesian grids.  It is intended exclusively for **peaceful,
-civilian purposes**:
+SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume solver for the compressible Navier–Stokes equations. It is designed for **high‑fidelity civilian research**:
 
-- **Medical research** – haemodynamics, respiratory aerosol transport,
-  drug delivery through micro‑fluidic devices.
-- **Weather and climate prediction** – high‑fidelity atmospheric boundary
-  layer simulations, pollutant dispersion, cloud microphysics.
-- **Civil aviation** – aerodynamic analysis of commercial aircraft, noise
-  reduction studies, air‑traffic wake turbulence.
+- **Medical flows** – cardiovascular haemodynamics, respiratory aerosol transport, micro‑fluidic drug delivery.
+- **Atmospheric and environmental physics** – turbulent boundary layers, pollutant dispersion, cloud microphysics.
+- **Civil aviation** – aerodynamic analysis, noise reduction, wake turbulence.
+- **Hypersonic civilian transport** – real‑gas effects, shock capturing, high‑speed boundary‑layer transition.
 
-**This software is not designed, tested, or authorised for use in weapons,
-military systems, or any form of armed conflict.**
+**This software is not intended, tested, or authorised for military applications, weapons development, or any form of armed conflict.**
 
 ---
 
 ## Overview
 
-SUPER DNS ONE resolves the compressible flow equations directly on a
-three‑dimensional Cartesian grid using a finite‑volume conservative
-discretisation.  It is augmented with a unique set of mathematical tools
-drawn from complex‑systems physics:
+SUPER DNS ONE solves the unsteady compressible Navier–Stokes equations on a structured Cartesian grid using a conservative finite‑volume formulation. Inviscid fluxes are evaluated with the **AUSM+** or **HLLC** Riemann solvers, combined with **2nd‑order MUSCL reconstruction** (minmod limiter). Time integration uses a low‑storage **3rd‑order TVD Runge–Kutta** scheme.
 
-- **Self‑Organised Criticality (SOC)** – an adaptive eddy viscosity that
-  reacts to local strain rates and stress accumulation, mimicking the
-  turbulent energy cascade without fixed empirical constants.  The SOC
-  kernel has **five trainable parameters**.
-- **Semantic‑State Contraction (SSC)** – a signal‑noise separator that
-  extracts physical flow structures from noisy sensor data.
-- **Renormalisation Group (RG)** – optional conservative spectral
-  truncation for coarse‑graining, accelerating long‑time simulations
-  while preserving large‑scale dynamics.
-- **Itô stochastic backscatter** – physically motivated sub‑grid energy
-  injection that replaces traditional LES models.
-- **Batalin–Vilkovisky (BV) consistency diagnostics** – monitors
-  mass, momentum, and energy conservation in real time.
+The solver is augmented with a unique set of physics‑aware modules:
 
-Compressible‑flow capabilities include:
+- **Self‑Organised Criticality (SOC)** – an adaptive sub‑grid model that learns the turbulent eddy viscosity from local strain‑rate statistics. Its 5‑parameter kernel is trainable via differential evolution or Bayesian optimisation.
+- **Semantic‑State Contraction (SSC)** – a signal‑noise separator that extracts physical flow structures from noisy sensor data.
+- **Renormalisation Group (RG)** – conservative spectral truncation to accelerate long‑time simulations while preserving large‑scale dynamics.
+- **Itô stochastic backscatter** – physically motivated sub‑grid energy injection for LES.
+- **Compressibility correction (Sarkar)** – modifies eddy viscosity in high‑Mach regions.
+- **Ducros shock sensor** – adaptive artificial viscosity for robust shock capturing.
+- **Werner–Wengle wall model** – for high‑Re wall‑bounded LES.
+- **Real‑gas thermodynamics** (CoolProp) – accurate equations of state for hypersonic flows.
+- **Immersed boundary method** – volume penalisation to handle complex medical geometries.
+- **Wavelet‑based denoising** – optional PyWavelets integration for signal processing.
 
-- Riemann‑solver‑based inviscid fluxes: **AUSM+** and **HLLC** with
-  optional **MUSCL reconstruction** (second‑order spatial accuracy).
-- **Compressibility correction** for hypersonic turbulent viscosity.
-- **Shock capturing** via dilatation‑based artificial viscosity.
-- Reynolds numbers up to machine precision.
-- Mixed precision (AMP) support on CUDA.
+All models are implemented in pure PyTorch, making the solver **end‑to‑end differentiable** and compatible with **CPU, CUDA, MPS (Apple Silicon), and Ascend NPU** backends.
 
-The solver is written in pure PyTorch and runs on **CPUs**, **NVIDIA GPUs**,
-**Apple Silicon (MPS)**, **Huawei Ascend NPU**, and multi‑GPU clusters
-without code changes.
+For grids larger than \(200^3\), the solver supports **multi‑GPU distributed memory parallelism** (domain decomposition along z) using `torch.distributed`.
 
 ---
 
 ## Features
 
-- 3D compressible Navier–Stokes on structured grids (finite‑volume)
-- AUSM+ and HLLC Riemann solvers (optional MUSCL reconstruction)
-- SOC‑driven adaptive eddy viscosity (trainable 5‑parameter kernel)
-- SSC‑based signal denoising and flow control
-- Renormalisation‑Group (RG) spectral truncation (optional)
+### Core Numerics
+- 3D compressible Navier–Stokes (conservative finite‑volume)
+- AUSM+ and HLLC Riemann solvers
+- 2nd‑order MUSCL reconstruction (minmod limiter)
+- 3rd‑order TVD Runge–Kutta time integration
+- Mixed precision (FP16/FP32) via PyTorch AMP (optional)
+
+### Turbulence & Sub‑grid Modelling
+- SOC adaptive eddy viscosity with 5‑parameter trainable kernel
+- SSC stress denoising for turbulent fluctuations
 - Itô stochastic backscatter for LES
-- BV consistency monitors (kinetic energy, divergence, stress balance)
-- Trainable SOC parameters via **Differential Evolution** or **Optuna**
-- Built‑in validation: Taylor–Green vortex, Kolmogorov –5/3 spectrum,
-  grid‑convergence order, conservation checks
-- Hypersonic boundary‑layer initialisation (`hypersonic_bnd`)
-- Signal/noise separation module for sensor data
-- Fully differentiable (PyTorch autograd) – ready for physics‑informed
-  machine learning and surrogate model training
-- Vendor‑neutral: CPU, CUDA, MPS, Ascend NPU
-- MIT license – unrestricted peaceful use
+- RG conservative spectral truncation
+- Compressibility correction (Sarkar)
+- Ducros shock sensor + artificial viscosity
+- Werner–Wengle wall model for high‑Re flows (optional)
+
+### Boundary Conditions
+- Periodic
+- Supersonic inflow
+- Subsonic outflow
+- No‑slip isothermal wall
+- Isothermal moving wall
+- Far‑field (characteristic‑based)
+- Werner–Wengle wall model (applied as source term)
+
+### Physics Extensions
+- Real‑gas equation of state (CoolProp, optional)
+- Immersed boundary method (volume penalisation)
+- Wavelet‑based signal denoising (PyWavelets, optional)
+
+### Differentiability & Machine Learning
+- Fully differentiable – compatible with `torch.autograd`
+- Trainable SOC kernel (Differential Evolution / Optuna)
+
+### Validation & Diagnostics
+- Taylor–Green vortex test (kinetic energy decay)
+- Kolmogorov spectral analysis (inertial range slope)
+- Grid convergence test (Richardson extrapolation)
+- Batalin–Vilkovisky (BV) consistency monitors (energy, divergence, stress balance)
+
+### Hardware & Parallelism
+- Multi‑backend: CPU, CUDA, MPS, Ascend NPU
+- Mixed precision (AMP)
+- Distributed multi‑GPU (domain decomposition along z)
+- Checkpoint / restart support
 
 ---
 
@@ -87,16 +97,18 @@ without code changes.
 git clone https://github.com/yoonalimsuwan/SUPER-DNS-ONE.git
 cd SUPER-DNS-ONE
 
-# Create and activate a virtual environment (recommended)
+# Create a virtual environment (recommended)
 python -m venv venv
-source venv/bin/activate   # Linux/macOS
-# venv\Scripts\activate    # Windows
+source venv/bin/activate      # Linux/macOS
+# venv\Scripts\activate       # Windows
 
 # Core dependencies
 pip install torch numpy scipy matplotlib
 
-# Optional: Optuna for hyperparameter tuning
-pip install optuna
+# Optional dependencies
+pip install optuna              # Hyper‑parameter tuning
+pip install CoolProp            # Real‑gas EOS
+pip install PyWavelets          # Wavelet denoising
 ```
 
 ---
@@ -105,21 +117,43 @@ Quick Start
 
 The main script is super_dns_one.py.
 
+Taylor–Green vortex (default)
+
 ```bash
-# Taylor–Green vortex (default) with AUSM+
 python super_dns_one.py --steps 200 --flux ausm
-
-# Hypersonic boundary layer (Mach 20), 128³ grid
-python super_dns_one.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
-
-# Train SOC parameters to match a target kinetic energy
-python super_dns_one.py --train --target_energy 0.5 --tune_method de
-
-# Denoise a synthetic velocity field with SSC
-python super_dns_one.py --denoise
 ```
 
-For a full list of command‑line arguments, use:
+Hypersonic boundary layer (Mach 20, 128³)
+
+```bash
+python super_dns_one.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
+```
+
+Train SOC parameters to match a target kinetic energy
+
+```bash
+python super_dns_one.py --train-soc --target-energy 0.5
+```
+
+Grid convergence test
+
+```bash
+python super_dns_one.py --grid-convergence
+```
+
+Denoise a velocity field with SSC
+
+```bash
+python super_dns_one.py --denoise --denoise-method ssc
+```
+
+Multi‑GPU distributed simulation (e.g., 4 GPUs, total grid 128³)
+
+```bash
+torchrun --nproc_per_node=4 super_dns_one.py --nx 128 --ny 128 --nz 128 --distributed --steps 500
+```
+
+For a full list of options, run:
 
 ```bash
 python super_dns_one.py --help
@@ -127,60 +161,158 @@ python super_dns_one.py --help
 
 ---
 
-Validation & Benchmarks
+Command‑Line Arguments
 
-The solver includes built‑in routines that can be activated with
---benchmark (or by calling them programmatically):
+Argument Default Description
+--nx, --ny, --nz 64 Grid dimensions (total cells). In distributed mode, nz is split among GPUs.
+--Lx, --Ly, --Lz 2π Domain size in each direction.
+--Re 1e4 Reynolds number. Set to 0 for inviscid flow.
+--Pr 0.71 Prandtl number.
+--gamma 1.4 Ratio of specific heats.
+--Mach 0.1 Reference Mach number.
+--cfl 0.5 CFL number.
+--steps 500 Number of time steps.
+--flux ausm Riemann solver: ausm or hllc.
+--muscl (on) Enable MUSCL reconstruction.
+--shock-capturing (off) Enable Ducros sensor + artificial viscosity.
+--rg (off) Enable RG spectral truncation.
+--rg-keep 0.5 Fraction of wavenumbers retained by RG.
+--ito 0.0 Noise amplitude for Itô backscatter.
+--soc-temp 300.0 Base temperature for SOC model.
+--max-nu-t 0.05 Maximum eddy viscosity.
+--ssc-epsilon 0.0028 SSC smoothing parameter.
+--wall-model (off) Enable Werner–Wengle wall model.
+--wm-A, --wm-B 8.3, 1/7 Wall model constants.
+--bc-{x,y,z}-{min,max} periodic Boundary condition type. Choices: periodic, supersonic_inflow, subsonic_outflow, noslip_isothermal, werner_wengle, moving_wall, farfield.
+--inflow-*, --outflow-p, --wall-temp, --farfield-*, --moving-wall-* (various) Parameters for non‑periodic boundary conditions.
+--eos-model ideal Equation of state: ideal or real (requires CoolProp).
+--fluid Air Fluid name for CoolProp.
+--ib-mask None Path to .npy file containing a boolean mask for immersed boundary (True = solid).
+--ib-eta 1e4 Penalisation strength for IB momentum forcing.
+--ib-T-target None Target temperature inside solid (if None, no energy penalty).
+--ib-eta-T 1e4 Penalisation strength for IB energy forcing.
+--device cuda Preferred compute backend: cuda, cpu, mps, ascend.
+--dtype float32 Floating point precision.
+--save-checkpoint None Path to save a checkpoint.
+--load-checkpoint None Path to load a checkpoint and resume.
+--train-soc (off) Train SOC kernel parameters.
+--target-energy 0.1 Target kinetic energy for training.
+--grid-convergence (off) Run grid convergence test.
+--denoise (off) Run denoising demonstration.
+--denoise-method ssc Denoising method: ssc, wiener, wavelet.
+--distributed (off) Enable multi‑GPU distributed parallelism (use with torchrun).
 
-Test Description
-Taylor–Green vortex Energy decay rate compared with analytical solution
-Kolmogorov spectrum Slope of E(k) in the inertial range (expected –5/3)
-Grid convergence Order of accuracy via Richardson extrapolation
-BV conservation checks Maximum divergence of velocity, stress consistency, and kinetic energy history
+---
 
-Additionally, the hypersonic_bnd case provides a compressible boundary‑layer
-initial condition suitable for testing high‑speed wall‑bounded flows.
+Boundary Conditions (Non‑Periodic)
 
-Note: A dedicated shock‑tube test and automated hypersonic validation
-suite are planned for a future release.
+When periodic boundaries are not sufficient, the solver offers:
+
+Type Description Required Parameters
+supersonic_inflow Fixed primitive state at boundary. --inflow-rho, --inflow-u, --inflow-v, --inflow-w, --inflow-p
+subsonic_outflow Prescribed back pressure, extrapolated velocities. --outflow-p
+noslip_isothermal Zero velocity, fixed wall temperature. --wall-temp
+werner_wengle Algebraic wall function with temperature. --wall-temp, --wm-A, --wm-B
+moving_wall Specified wall velocity and temperature. --moving-wall-u, --moving-wall-v, --moving-wall-w, --wall-temp
+farfield Characteristic‑based non‑reflecting condition. --farfield-rho, --farfield-u, --farfield-v, --farfield-w, --farfield-p
+
+All non‑periodic BCs include 2nd‑order ghost‑cell treatment.
+
+---
+
+Sub‑Grid Models in Detail
+
+SOC (Self‑Organised Criticality)
+
+The eddy viscosity is computed from a kernel \nu_t = (C_s \Delta)^2 S (r) where r = S/\langle S\rangle. The kernel form is:
+
+f(r) = C_0 \, r^{-\alpha} \exp(-r/\lambda)
+
+with parameters C_0, \lambda, \alpha, \theta, \tau (the last two control stress accumulation and collapse). The kernel is trainable via differential evolution or Optuna.
+
+SSC (Semantic‑State Contraction)
+
+A low‑pass filter for the stress field \sigma:
+
+\sigma_{n+1} = \sigma_n + \epsilon\,(S - \sigma_n)
+
+It separates fast turbulent fluctuations from slow, large‑scale structures.
+
+Itô Backscatter
+
+Random stresses with amplitude \sim \sqrt{dt} are added to the viscous stress tensor, injecting energy at sub‑grid scales.
+
+RG (Renormalisation Group)
+
+Every --rg-keep fraction of the highest wavenumbers is set to zero in Fourier space, providing a conservative coarse‑graining that preserves large‑scale dynamics.
+
+---
+
+Immersed Boundary Method
+
+Complex solid geometries can be imposed by providing a 3D binary mask (.npy file) with the same dimensions as the grid. Volume penalisation forces the velocity toward the target (zero by default) and optionally imposes a target temperature inside the solid.
+
+---
+
+Validation Suite
+
+The solver includes several built‑in diagnostics:
+
+1. Taylor–Green vortex – monitor kinetic energy dissipation rate vs. analytical solution.
+2. Kolmogorov spectrum – compute the energy spectrum E(k) and fit the inertial‑range slope (theoretical –5/3).
+3. Grid convergence test – compute the observed order of accuracy using Richardson extrapolation on successive grid refinements.
+4. BV conservation checks – track maximum divergence, stress balance, and energy history.
+
+Results are logged to the console and can be extended by the user.
+
+---
+
+Distributed Parallelism
+
+For large grids (>200^3) the solver can be launched with torchrun. Domain decomposition is performed along the z‑axis, and halo exchanges communicate two ghost layers between neighbouring sub‑domains.
+
+Example:
+
+```bash
+torchrun --nproc_per_node=4 super_dns_one.py --nx 256 --ny 256 --nz 256 --distributed --steps 1000
+```
+
+The nz dimension must be divisible by the number of GPUs. Checkpointing, BCs, and the wall model are all compatible with the parallel execution.
 
 ---
 
 Architecture & Vendor Neutrality
 
-SUPER DNS ONE is built exclusively on PyTorch tensor operations.  No
-CUDA‑specific kernels are used.  This design guarantees portability across:
+SUPER DNS ONE is built exclusively with PyTorch tensor operations. No CUDA‑specific kernels are used, ensuring portability across:
 
-· CPU (x86‑64, ARM) – minimum 4 GB RAM for grid sizes up to 64³
-· NVIDIA GPU (CUDA) – including Google Colab T4
-· Apple Silicon (MPS backend)
-· Huawei Ascend (torch_npu backend)
-· Multi‑GPU clusters – ready for DataParallel / DistributedDataParallel
+· CPU (x86‑64, ARM) – suitable for small grids or prototyping.
+· NVIDIA GPU (CUDA) – including Google Colab T4/V100.
+· Apple Silicon (MPS backend) – native support via PyTorch 2.x.
+· Huawei Ascend (torch_npu backend) – automatically detected.
+· Multi‑GPU clusters – via torch.distributed (DDP).
 
 ---
 
-Roadmap & Planned Features
+Roadmap
 
 · Dedicated shock‑tube validation case
-· AI surrogate model training – because the solver is fully
-  differentiable, it can directly generate training data and provide
-  physics‑informed gradients for neural network surrogates (O(1) inference).
-· Real‑gas equations of state for hypersonic flows
-· Immersed boundary method for complex medical geometries
-· Distributed training wrapper for DDP
+· Automated hypersonic validation suite
+· AI‑accelerated surrogate models – because the solver is fully differentiable, it can directly provide training data and physics‑informed gradients for neural network surrogates. Once trained, such surrogates can deliver flow predictions at near O(1) speed, enabling real‑time design optimisation and interactive simulation.
+· Adaptive mesh refinement (AMR) support
+· Multi‑phase flow extensions (volume‑of‑fluid)
 
 ---
 
-Citing SUPER DNS ONE
+Citing
 
-If you use this software in your research, please cite:
+If you use SUPER DNS ONE in your research, please cite:
 
 ```
-Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation."
-Zenodo, 2026. DOI: 10.5281/zenodo.20283663   (if available)
+Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation for Peaceful Applications."
+Zenodo, 2026. DOI: 10.5281/zenodo.XXXXXXX
 ```
 
-Otherwise, cite the GitHub repository:
+Or cite the GitHub repository:
 
 ```
 Yoon A Limsuwan. (2026). SUPER DNS ONE (Version 1.0.0) [Computer software].
@@ -191,8 +323,7 @@ https://github.com/yoonalimsuwan/SUPER-DNS-ONE
 
 License
 
-This project is licensed under the MIT License – see the LICENSE file
-for details.
+This project is licensed under the MIT License – see the LICENSE file for details.
 
 ---
 
@@ -202,5 +333,3 @@ Yoon A Limsuwan – GitHub
 Project repository: https://github.com/yoonalimsuwan/SUPER-DNS-ONE
 
 ```
-
----
