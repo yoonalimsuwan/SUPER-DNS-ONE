@@ -17,7 +17,7 @@ Everything else — advection schemes, Riemann solvers, boundary conditions — 
 ## Where to Contribute
 
 ### 1. Advection Schemes
-**File:** `structuralfluctuatinghydro.py` / `super_dns_one_v2.py`  
+**File:** `StructuralFluctuatingHydro.py` / `super_dns_one.py`  
 **Current baseline:** 1st-order upwind (stable, simple)  
 **What the community can add:**
 - 2nd-order TVD (minmod, van Leer, superbee limiters)
@@ -33,7 +33,7 @@ and replace or extend it.  Keep the interface: input `(rho, ux, uy, dx, dy, dt)`
 ---
 
 ### 2. Riemann Solvers
-**File:** `super_dns_one_v2.py`  
+**File:** `super_dns_one.py`  
 **Current options:** AUSM+, HLLC  
 **What the community can add:**
 - Roe solver with entropy fix
