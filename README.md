@@ -125,31 +125,31 @@ The main script is super_dns_one.py.
 Taylor–Green vortex (default)
 
 ```bash
-python super_dns_one.py --steps 200 --flux ausm
+python super_dns_one_v5.py --steps 200 --flux ausm
 ```
 
 Hypersonic boundary layer (Mach 20, 128³)
 
 ```bash
-python super_dns_one.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
+python super_dns_one_v5.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
 ```
 
 Train SOC parameters to match a target kinetic energy
 
 ```bash
-python super_dns_one.py --train-soc --target-energy 0.5
+python super_dns_one_v5.py --train-soc --target-energy 0.5
 ```
 
 Grid convergence test
 
 ```bash
-python super_dns_one.py --grid-convergence
+python super_dns_one_v5.py --grid-convergence
 ```
 
 Denoise a velocity field with SSC
 
 ```bash
-python super_dns_one.py --denoise --denoise-method ssc
+python super_dns_one_v5.py --denoise --denoise-method ssc
 ```
 
 Multi‑GPU distributed simulation (e.g., 4 GPUs, total grid 128³)
@@ -161,7 +161,7 @@ torchrun --nproc_per_node=4 super_dns_one.py --nx 128 --ny 128 --nz 128 --distri
 For a full list of options, run:
 
 ```bash
-python super_dns_one.py --help
+python super_dns_one_v5.py --help
 ```
 ---
 
