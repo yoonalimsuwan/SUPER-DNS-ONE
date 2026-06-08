@@ -120,7 +120,7 @@ pip install PyWavelets          # Wavelet denoising
 
 Quick Start
 
-The main script is super_dns_one.py.
+The main script is super_dns_one_v6.py.
 
 Taylor–Green vortex (default)
 
