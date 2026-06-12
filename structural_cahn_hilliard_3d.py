@@ -112,12 +112,17 @@ try:
         SemanticStateContraction,
         CSOCBase,
         InterfaceDetectorBase,
+        CahnHilliardFHBridge,       # Bridge: CH → FH (v3.1)
+        CahnHilliardDNSBridge as _CahnHilliardDNSBridgeCore,  # canonical bridge
+        structural_biharmonic_n as _biharmonic_core,
         ONE_VERSION,
     )
     _HAS_ONE_CORE = True
 except ImportError:
     _HAS_ONE_CORE = False
     ONE_VERSION   = "standalone"
+    _CahnHilliardDNSBridgeCore = None
+    _biharmonic_core           = None
     logger.warning("one_core not found — running in standalone mode.")
 
 
