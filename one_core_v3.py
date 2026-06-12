@@ -7,17 +7,27 @@
 # ORCID     : 0009-0008-2374-0788
 # GitHub    : yoonalimsuwan
 #
+# AI Development Partners:
+#   Claude   (Anthropic)  — architecture review, differentiability fixes,
+#                           bridge protocol design, integration testing
+#   GPT      (OpenAI)     — algorithmic suggestions, code review
+#   Gemini   (Google)     — numerical scheme cross-validation
+#   DeepSeek              — supplementary code analysis
+#
 # This module is the single source of truth for every component that is
 # shared across the ONE Ecosystem:
 #
 #   structural_langevin_v3.py          (MD / particle scale)
 #   structuralfluctuatinghydro_v6.py  (FH continuum 3-D)
 #   super_dns_one_v6.py               (DNS/LES 3-D compressible)
+#   structural_cahn_hilliard_3d.py    (CH phase-field 3-D)
 #
 # Cross-file bridge protocol
 # ──────────────────────────
-#   LangevinFHBridge   — feeds Langevin structural stress into FH solver
-#   LangevinDNSBridge  — feeds Langevin structural stress into DNS solver
+#   LangevinFHBridge        — Langevin structural stress → FH solver
+#   LangevinDNSBridge       — Langevin structural stress → DNS solver
+#   CahnHilliardFHBridge    — CH phase-field density/viscosity → FH solver
+#   CahnHilliardDNSBridge   — CH phase-field + Korteweg forces → DNS solver
 #
 # Rule: if a class appears in more than one solver file, it lives here and
 # is imported from here.  Individual solver files must NOT redefine these
@@ -29,8 +39,16 @@
 #   CSOCBase                   — base class for CSOC adaptive thermostat/viscosity
 #   InterfaceDetectorBase      — abstract base for interface detection
 #   StructuralItoBase          — abstract base for Itô drift correction
+#   structural_biharmonic_n    — recursive Δ_S^n operator (module-level util)
 #   get_device                 — unified hardware-backend selector
 #   ONE_VERSION                — ecosystem-wide version string
+#
+# Version history
+# ───────────────
+#   3.0.0  — Langevin↔FH and Langevin↔DNS bridges
+#   3.1.0  — CahnHilliard↔FH, CahnHilliard↔DNS bridges;
+#             structural_biharmonic_n promoted to one_core;
+#             full 5-solver interoperability
 #
 # =============================================================================
 
@@ -46,7 +64,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-ONE_VERSION: str = "3.0.0"
+ONE_VERSION: str = "3.1.0"
 
 
 # =============================================================================
@@ -363,6 +381,206 @@ class LangevinDNSBridge:
         with torch.no_grad():
             sigma_scalar = self.lang.thermostat.ssc.prev_sigma   # scalar buffer
             self.dns._ext_sigma = sigma_scalar.to(self.dns.device)
+
+
+# =============================================================================
+# 5b. Cahn-Hilliard Bridge Protocol  (ONE Core v3.1)
+# =============================================================================
+
+class CahnHilliardFHBridge:
+    """
+    Bridge: projects Cahn-Hilliard phase-field quantities onto the
+    Fluctuating Hydrodynamics (FH) solver grid, enabling two-way coupling
+    between the CH phase-field and the continuum FH solver.
+
+    Coupling channels (CH → FH)
+    ────────────────────────────
+    1. Density modulation  : rho_eff = rho_B + (rho_A−rho_B)·φ(u)
+    2. Viscosity modulation: nu_eff  = nu_B  + (nu_A −nu_B )·φ(u)
+    3. Interface mask      : phi used to sharpen FH interface detection
+
+    where φ(u) = 0.5·(u+1) maps the CH order parameter u ∈ [−1,+1] to
+    the volume fraction φ ∈ [0, 1].
+
+    All operations are differentiable w.r.t. ``u``.
+
+    Usage::
+
+        bridge = CahnHilliardFHBridge(ch_solver, fh_solver,
+                                       rho_A=1.0, rho_B=2.0)
+        for step in range(n):
+            u_new = ch_solver.step(u)
+            bridge.sync(u_new)                    # push CH → FH
+            rho, ux, uy, uz, p, diag = fh_solver.step(rho, ux, uy, uz, p)
+    """
+
+    def __init__(
+        self,
+        ch_solver,
+        fh_solver,
+        rho_A: float = 1.0,
+        rho_B: float = 2.0,
+        nu_A:  float = 1e-3,
+        nu_B:  float = 1e-2,
+    ) -> None:
+        self.ch    = ch_solver
+        self.fh    = fh_solver
+        self.rho_A = rho_A
+        self.rho_B = rho_B
+        self.nu_A  = nu_A
+        self.nu_B  = nu_B
+
+    def sync(self, u: torch.Tensor) -> None:
+        """
+        Project CH order parameter onto FH material fields.
+
+        Args:
+            u : (Nx, Ny, Nz) Cahn-Hilliard order parameter ∈ [−1, +1].
+
+        Writes to fh_solver:
+            _ext_rho_eff : (Nx, Ny, Nz) effective density field
+            _ext_nu_eff  : (Nx, Ny, Nz) effective kinematic viscosity field
+            _ext_mask    : (Nx, Ny, Nz) volume-fraction interface mask ∈ [0,1]
+        """
+        with torch.no_grad():
+            phi = 0.5 * (u + 1.0)                                    # (Nx,Ny,Nz)
+            dev = self.fh.device
+            self.fh._ext_rho_eff = (
+                self.rho_B + (self.rho_A - self.rho_B) * phi
+            ).to(dev)
+            self.fh._ext_nu_eff = (
+                self.nu_B + (self.nu_A - self.nu_B) * phi
+            ).to(dev)
+            # Interface mask: high near u≈0 (diffuse interface), low in bulk
+            self.fh._ext_mask = (
+                1.0 - (u ** 2).clamp(max=1.0)        # ≈1 at u=0, ≈0 at u=±1
+            ).to(dev)
+
+
+class CahnHilliardDNSBridge:
+    """
+    Bridge: injects Cahn-Hilliard phase-field material properties and
+    Korteweg capillary body forces into the DNS/LES compressible solver.
+
+    Coupling channels (CH → DNS)
+    ─────────────────────────────
+    1. External density modulation  → ``dns_solver._ext_rho_ch``
+    2. External viscosity scaling   → ``dns_solver._ext_nu_ch``
+    3. Korteweg body force (per axis) → ``dns_solver._ext_fx/fy/fz``
+
+    All fields are stored as solver attributes that ``_compute_rhs()``
+    blends in when present.
+
+    The Korteweg force reads::
+
+        f_i = −κ · ρ_eff · ∂μ_R/∂x_i
+
+    which is computed by ``ch_solver``'s ``compute_chemical_potential``.
+
+    Usage::
+
+        bridge = CahnHilliardDNSBridge(ch_solver, dns_solver,
+                                        korteweg_strength=1e-4)
+        for step in range(n):
+            u_new = ch_solver.step(u)
+            bridge.sync(u_new)          # push CH → DNS
+            dns_solver.step()
+    """
+
+    def __init__(
+        self,
+        ch_solver,
+        dns_solver,
+        rho_A:             float = 1.0,
+        rho_B:             float = 2.0,
+        nu_A:              float = 1e-3,
+        nu_B:              float = 1e-2,
+        korteweg_strength: float = 0.0,
+    ) -> None:
+        self.ch                = ch_solver
+        self.dns               = dns_solver
+        self.rho_A             = rho_A
+        self.rho_B             = rho_B
+        self.nu_A              = nu_A
+        self.nu_B              = nu_B
+        self.korteweg_strength = korteweg_strength
+
+    def sync(
+        self,
+        u:     torch.Tensor,
+        sigma: Optional[torch.Tensor] = None,
+    ) -> None:
+        """
+        Project CH state onto DNS solver buffers.
+
+        Args:
+            u     : (Nx, Ny, Nz) CH order parameter.
+            sigma : optional structural sigma field for chemical potential.
+
+        Writes to dns_solver:
+            _ext_rho_ch : (Nx, Ny, Nz) density modulation
+            _ext_nu_ch  : (Nx, Ny, Nz) viscosity modulation
+            _ext_fx/fy/fz : (Nx, Ny, Nz) Korteweg body force components
+        """
+        dev = self.dns.device
+        with torch.no_grad():
+            phi = 0.5 * (u + 1.0)
+            rho_eff = self.rho_B + (self.rho_A - self.rho_B) * phi
+            nu_eff  = self.nu_B  + (self.nu_A  - self.nu_B ) * phi
+
+            self.dns._ext_rho_ch = rho_eff.to(dev)
+            self.dns._ext_nu_ch  = nu_eff.to(dev)
+
+            if self.korteweg_strength != 0.0:
+                mu_R = self.ch.compute_chemical_potential(u, sigma)
+                dx   = self.ch.cfg.dx
+                k    = self.korteweg_strength
+                dmx  = (torch.roll(mu_R,-1,0) - torch.roll(mu_R,+1,0)) / (2*dx)
+                dmy  = (torch.roll(mu_R,-1,1) - torch.roll(mu_R,+1,1)) / (2*dx)
+                dmz  = (torch.roll(mu_R,-1,2) - torch.roll(mu_R,+1,2)) / (2*dx)
+                self.dns._ext_fx = (-k * rho_eff * dmx).to(dev)
+                self.dns._ext_fy = (-k * rho_eff * dmy).to(dev)
+                self.dns._ext_fz = (-k * rho_eff * dmz).to(dev)
+            else:
+                zeros = torch.zeros_like(u).to(dev)
+                self.dns._ext_fx = zeros
+                self.dns._ext_fy = zeros
+                self.dns._ext_fz = zeros
+
+
+# =============================================================================
+# 5c. Structural Biharmonic Operator (module-level, ONE Core v3.1)
+# =============================================================================
+
+def structural_biharmonic_n(
+    field:        torch.Tensor,
+    sigma:        torch.Tensor,
+    n:            int,
+    laplacian_fn,
+) -> torch.Tensor:
+    """
+    Compute Δ_S^n u recursively (Section 3.1 of Limsuwan 2026).
+
+    Promoted to ``one_core`` so that any solver in the ONE Ecosystem
+    can call it without importing the full CH solver class.
+
+    Parameters
+    ----------
+    field        : (Nx, Ny, Nz) input field
+    sigma        : (Nx, Ny, Nz) structural regime field
+    n            : operator order (n≥1)
+    laplacian_fn : callable(field, sigma) → (Nx, Ny, Nz)
+
+    Returns
+    -------
+    (Nx, Ny, Nz) = Δ_S^n field
+    """
+    if n < 1:
+        raise ValueError(f"n must be >= 1; got {n}")
+    result = laplacian_fn(field, sigma)
+    for _ in range(n - 1):
+        result = laplacian_fn(result, sigma)
+    return result
 
 
 # =============================================================================
