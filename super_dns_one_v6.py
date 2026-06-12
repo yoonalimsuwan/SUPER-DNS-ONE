@@ -3,9 +3,21 @@
 # =============================================================================
 # Author : Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
+# Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
 #
-# Changes v5 → v6  (Cross-file integration fixes)
+# AI Development Partners:
+#   Claude   (Anthropic)  — differentiability audit, CH body-force injection,
+#                           bridge protocol design
+#   GPT      (OpenAI)     — algorithmic suggestions, flux scheme review
+#   Gemini   (Google)     — numerical scheme cross-validation
+#   DeepSeek              — supplementary code analysis
+#
+# Changes v6.0 → v6.1:
+#   • CahnHilliardDNSBridge imported from one_core
+#   • CompressibleSolver.__init__ initialises _ext_rho_ch, _ext_nu_ch,
+#     _ext_fx, _ext_fy, _ext_fz buffers for CH coupling
+#   • _compute_rhs blends CH density/viscosity and injects Korteweg body force
 #   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
@@ -86,6 +98,7 @@ from one_core import (
     CSOCBase,
     InterfaceDetectorBase,
     LangevinDNSBridge,          # Bridge: Langevin → DNS (Bug 3 fix)
+    CahnHilliardDNSBridge,      # Bridge: CahnHilliard → DNS (v3.1)
     get_device as _core_get_device,
     ONE_VERSION,
 )
@@ -1477,6 +1490,14 @@ class CompressibleSolver:
 
         # External Langevin coupling buffer (written by LangevinDNSBridge.sync())
         self._ext_sigma = torch.tensor(0.0, device=self.device)
+
+        # External Cahn-Hilliard coupling buffers (written by CahnHilliardDNSBridge.sync())
+        _zeros = torch.zeros(cfg.nx, cfg.ny, cfg.nz, device=self.device, dtype=self.dtype)
+        self._ext_rho_ch = _zeros.clone()   # (nx,ny,nz) density modulation
+        self._ext_nu_ch  = _zeros.clone()   # (nx,ny,nz) viscosity modulation
+        self._ext_fx     = _zeros.clone()   # (nx,ny,nz) Korteweg body force x
+        self._ext_fy     = _zeros.clone()   # (nx,ny,nz) Korteweg body force y
+        self._ext_fz     = _zeros.clone()   # (nx,ny,nz) Korteweg body force z
         self.energy_hist = []
         self.div_hist    = []
 
@@ -1834,6 +1855,10 @@ class CompressibleSolver:
         gamma = self.gamma
         nx,ny,nz = rho.shape
 
+        # Blend Cahn-Hilliard density if CH bridge has synced (zero-cost otherwise)
+        if self._ext_rho_ch.abs().max() > 1e-30:
+            rho = 0.5 * (rho + self._ext_rho_ch)
+
         u = rhou / _softplus_floor(rho, 1e-8)
         v = rhov / _softplus_floor(rho, 1e-8)
         w = rhow / _softplus_floor(rho, 1e-8)
@@ -1985,6 +2010,17 @@ class CompressibleSolver:
         rhs_rhov = -conv_rhov + visc_rhov
         rhs_rhow = -conv_rhow + visc_rhow
         rhs_rhoE = -conv_rhoE + visc_rhoE
+
+        # ── Cahn-Hilliard Korteweg body force injection ─────────────────────
+        # Written by CahnHilliardDNSBridge.sync(); zero-cost if not connected.
+        if self._ext_fx.abs().max() > 1e-30:
+            rhs_rhou = rhs_rhou + self._ext_fx
+            rhs_rhov = rhs_rhov + self._ext_fy
+            rhs_rhow = rhs_rhow + self._ext_fz
+            # Energy: f · u  (differentiable — u already computed above)
+            rhs_rhoE = rhs_rhoE + (self._ext_fx * u +
+                                   self._ext_fy * v +
+                                   self._ext_fz * w)
 
         return rhs_rho, rhs_rhou, rhs_rhov, rhs_rhow, rhs_rhoE
 
