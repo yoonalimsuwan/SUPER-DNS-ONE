@@ -79,7 +79,7 @@ For grids larger than 200³, the solver supports **multi‑GPU distributed memor
 - Wavelet‑based signal denoising (PyWavelets, optional)
 
 ### Differentiability & Machine Learning
-- Fully differentiable – compatible with `torch.autograd`
+- Native Fully differentiable 
 - Trainable SOC kernel (Differential Evolution / Optuna)
 
 ### Validation & Diagnostics
@@ -113,7 +113,7 @@ pip install torch numpy scipy matplotlib
 # Optional dependencies
 pip install optuna              # Hyper‑parameter tuning
 pip install CoolProp            # Real‑gas EOS
-pip install PyWavelets          # Wavelet denoising
+pip install PyWavelets          # --nxnted denoising
 ```
 
 ---
@@ -155,7 +155,7 @@ python super_dns_one_v6.py --denoise --denoise-method ssc
 Multi‑GPU distributed simulation (e.g., 4 GPUs, total grid 128³)
 
 ```bash
-torchrun --nproc_per_node=4 super_dns_one.py --nx 128 --ny 128 --nz 128 --distributed --steps 500
+torchrun --nproc_per_node=4 super_dns_one_v6.py --nx 128 --ny 128 --nz 128 --distributed --steps 500
 ```
 
 For a full list of options, run:
@@ -223,7 +223,7 @@ For large grids (>200³) the solver can be launched with torchrun. Domain decomp
 Example:
 
 ```bash
-torchrun --nproc_per_node=4 super_dns_one.py --nx 256 --ny 256 --nz 256 --distributed --steps 1000
+torchrun --nproc_per_node=4 super_dns_one_v6.py --nx 256 --ny 256 --nz 256 --distributed --steps 1000
 ```
 
 The nz dimension must be divisible by the number of GPUs. Checkpointing, BCs, and the wall model are all compatible with the parallel execution.
