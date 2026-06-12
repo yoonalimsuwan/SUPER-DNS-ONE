@@ -4,7 +4,14 @@
 # Developer: Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Year: 2026
-# Version: 3.0 (cross-file bridge + ONE Core v3)
+# Version: 3.1 (full ecosystem integration — one_core v3.1)
+#
+# AI Development Partners:
+#   Claude   (Anthropic)  — BAOAB differentiability, bridge protocol,
+#                           SSC buffer pattern, integration testing
+#   GPT      (OpenAI)     — algorithmic suggestions, code review
+#   Gemini   (Google)     — numerical scheme cross-validation
+#   DeepSeek              — supplementary code analysis
 #
 # A Fully Differentiable, Higher-Order (BAOAB Splitting) Langevin Integrator
 # integrating the 4-Paper Structural Calculus Ecosystem:
@@ -35,6 +42,8 @@ from one_core import (
     StructuralItoBase,          # Itô correction abstract base
     LangevinFHBridge,           # Bridge → StructuralFluctuatingHydro
     LangevinDNSBridge,          # Bridge → CompressibleSolver (DNS/LES)
+    CahnHilliardFHBridge,       # Bridge → FH from CH (re-exported for convenience)
+    CahnHilliardDNSBridge,      # Bridge → DNS from CH (re-exported for convenience)
     ONE_VERSION,
 )
 
