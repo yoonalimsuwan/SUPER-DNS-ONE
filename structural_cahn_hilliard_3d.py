@@ -146,41 +146,41 @@ def _soft_abs(x: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
 # =============================================================================
 # [CORE-1]  Module-level utility: structural_biharmonic_n
 # =============================================================================
+# Canonical implementation lives in one_core_v3.py (structural_biharmonic_n).
+# If one_core is available we use that directly (imported as _biharmonic_core
+# above and aliased here).  The standalone fallback below is used only when
+# one_core cannot be imported (e.g. running this file in isolation).
 
-def structural_biharmonic_n(
-    field:        torch.Tensor,
-    sigma:        torch.Tensor,
-    n:            int,
-    laplacian_fn: Callable,
-) -> torch.Tensor:
-    """
-    Compute Delta_S^n u recursively.
+if _HAS_ONE_CORE:
+    # Re-export the one_core canonical version under the public name.
+    structural_biharmonic_n = _biharmonic_core  # type: ignore[assignment]
+else:
+    # Standalone fallback — identical logic, no one_core dependency.
+    def structural_biharmonic_n(          # type: ignore[misc]
+        field:        torch.Tensor,
+        sigma:        torch.Tensor,
+        n:            int,
+        laplacian_fn: Callable,
+    ) -> torch.Tensor:
+        """
+        Compute Δ_S^n u recursively (standalone fallback).
 
-    Parameters
-    ----------
-    field        : (Nx, Ny, Nz) input field
-    sigma        : (Nx, Ny, Nz) structural regime field
-    n            : operator order (n=1 -> Delta_S u, n=2 -> Delta_S^2 u, ...)
-    laplacian_fn : callable(field, sigma) -> (Nx, Ny, Nz)
-                   typically solver._structural_laplacian
+        Normally provided by one_core.structural_biharmonic_n.
+        This fallback is activated only when one_core is unavailable.
 
-    Returns
-    -------
-    (Nx, Ny, Nz) = Delta_S^n field
-
-    Notes
-    -----
-    Exposed at module level so one_core.py and other ONE Ecosystem
-    cluster modules can call it without importing the full solver class.
-    This implements Section 3.1 (Recursive Structural Operators) of:
-    "Structural Higher-Order Differential Operators" (Limsuwan, 2026).
-    """
-    if n < 1:
-        raise ValueError(f"n must be >= 1; got {n}")
-    result = laplacian_fn(field, sigma)
-    for _ in range(n - 1):
-        result = laplacian_fn(result, sigma)
-    return result
+        Parameters
+        ----------
+        field        : (Nx, Ny, Nz) input field
+        sigma        : (Nx, Ny, Nz) structural regime field
+        n            : operator order (n≥1)
+        laplacian_fn : callable(field, sigma) → (Nx, Ny, Nz)
+        """
+        if n < 1:
+            raise ValueError(f"n must be >= 1; got {n}")
+        result = laplacian_fn(field, sigma)
+        for _ in range(n - 1):
+            result = laplacian_fn(result, sigma)
+        return result
 
 
 # =============================================================================
@@ -1064,84 +1064,96 @@ class PhaseFieldCrystal3D(StructuralCahnHilliard3D):
 # =============================================================================
 # 6.  CahnHilliardDNSBridge
 # =============================================================================
+# Canonical implementation lives in one_core_v3.py (CahnHilliardDNSBridge).
+# We re-export it here under the same name so code that does:
+#   from structural_cahn_hilliard_3d import CahnHilliardDNSBridge
+# gets the same (identical) object as:
+#   from one_core import CahnHilliardDNSBridge
+#
+# When one_core is unavailable (standalone mode) we provide a minimal
+# fallback that covers Pattern B (coupled_step) only; sync() is disabled.
 
-class CahnHilliardDNSBridge(nn.Module):
-    """
-    Two-way coupling: Cahn-Hilliard phase-field <-> CompressibleSolver (DNS).
+if _HAS_ONE_CORE:
+    # Direct re-export — no duplication.
+    CahnHilliardDNSBridge = _CahnHilliardDNSBridgeCore  # type: ignore[misc]
+else:
+    # Standalone fallback (no dns_solver / sync support).
+    class CahnHilliardDNSBridge(nn.Module):  # type: ignore[no-redef]
+        """
+        Minimal standalone fallback used when one_core_v3 is unavailable.
 
-    Coupling mechanisms
-    -------------------
-    1. Density modulation (CH -> DNS):
-         rho_eff = rho_B + (rho_A - rho_B) * 0.5*(u+1)
+        Supports Pattern B (coupled_step) only.
+        For full functionality including sync() and dns_solver coupling,
+        ensure one_core_v3.py is on the Python path.
 
-    2. Viscosity modulation (CH -> DNS):
-         nu_eff  = nu_B  + (nu_A  - nu_B)  * 0.5*(u+1)
+        Compatible with: StructuralCahnHilliard3D,
+                         ThinFilmStructuralCahnHilliard3D,
+                         PhaseFieldCrystal3D.
+        """
 
-    3. Korteweg capillary stress (CH <-> DNS, optional):
-         f_i = -kappa * rho_eff * (d mu_R / dx_i)
-       Injected as body-force into DNS momentum equations.
+        def __init__(
+            self,
+            ch_solver:         "StructuralCahnHilliard3D",
+            dns_solver=None,
+            rho_A:             float = 1.0,
+            rho_B:             float = 2.0,
+            nu_A:              float = 1e-3,
+            nu_B:              float = 1e-2,
+            korteweg_strength: float = 0.0,
+        ):
+            super().__init__()
+            self.ch                = ch_solver
+            self.dns               = dns_solver
+            self.rho_A             = rho_A
+            self.rho_B             = rho_B
+            self.nu_A              = nu_A
+            self.nu_B              = nu_B
+            self.korteweg_strength = korteweg_strength
 
-    Compatible with: StructuralCahnHilliard3D,
-                     ThinFilmStructuralCahnHilliard3D,
-                     PhaseFieldCrystal3D.
-    """
+        def effective_density(self, u: torch.Tensor) -> torch.Tensor:
+            phi = 0.5 * (u + 1.0)
+            return self.rho_B + (self.rho_A - self.rho_B) * phi
 
-    def __init__(
-        self,
-        ch_solver:          StructuralCahnHilliard3D,
-        rho_A:              float = 1.0,
-        rho_B:              float = 2.0,
-        nu_A:               float = 1e-3,
-        nu_B:               float = 1e-2,
-        korteweg_strength:  float = 0.0,
-    ):
-        super().__init__()
-        self.ch               = ch_solver
-        self.rho_A            = rho_A
-        self.rho_B            = rho_B
-        self.nu_A             = nu_A
-        self.nu_B             = nu_B
-        self.korteweg_strength = korteweg_strength
+        def effective_viscosity(self, u: torch.Tensor) -> torch.Tensor:
+            phi = 0.5 * (u + 1.0)
+            return self.nu_B + (self.nu_A - self.nu_B) * phi
 
-    def effective_density(self, u: torch.Tensor) -> torch.Tensor:
-        phi = 0.5 * (u + 1.0)
-        return self.rho_B + (self.rho_A - self.rho_B) * phi
+        def korteweg_force(
+            self,
+            u:     torch.Tensor,
+            sigma: Optional[torch.Tensor] = None,
+        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            if self.korteweg_strength == 0.0:
+                z = torch.zeros_like(u)
+                return z, z, z
+            sigma   = self.ch._resolve_sigma(u, sigma)
+            mu_R    = self.ch.compute_chemical_potential(u, sigma)
+            rho_eff = self.effective_density(u)
+            dx      = self.ch.cfg.dx
+            k       = self.korteweg_strength
+            dmx = (torch.roll(mu_R, -1, 0) - torch.roll(mu_R, +1, 0)) / (2 * dx)
+            dmy = (torch.roll(mu_R, -1, 1) - torch.roll(mu_R, +1, 1)) / (2 * dx)
+            dmz = (torch.roll(mu_R, -1, 2) - torch.roll(mu_R, +1, 2)) / (2 * dx)
+            return -k * rho_eff * dmx, -k * rho_eff * dmy, -k * rho_eff * dmz
 
-    def effective_viscosity(self, u: torch.Tensor) -> torch.Tensor:
-        phi = 0.5 * (u + 1.0)
-        return self.nu_B + (self.nu_A - self.nu_B) * phi
+        def sync(self, u: torch.Tensor, sigma: Optional[torch.Tensor] = None) -> None:
+            raise RuntimeError(
+                "CahnHilliardDNSBridge.sync() requires one_core_v3 "
+                "(dns_solver coupling). Add one_core_v3.py to your path."
+            )
 
-    def korteweg_force(
-        self,
-        u:     torch.Tensor,
-        sigma: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """f_i = -kappa * rho_eff * (d mu_R / dx_i)"""
-        if self.korteweg_strength == 0.0:
-            z = torch.zeros_like(u)
-            return z, z, z
-        sigma   = self.ch._resolve_sigma(u, sigma)
-        mu_R    = self.ch.compute_chemical_potential(u, sigma)
-        rho_eff = self.effective_density(u)
-        dx      = self.ch.cfg.dx
-        k       = self.korteweg_strength
-        dmx = (torch.roll(mu_R,-1,0) - torch.roll(mu_R,+1,0)) / (2*dx)
-        dmy = (torch.roll(mu_R,-1,1) - torch.roll(mu_R,+1,1)) / (2*dx)
-        dmz = (torch.roll(mu_R,-1,2) - torch.roll(mu_R,+1,2)) / (2*dx)
-        return -k*rho_eff*dmx, -k*rho_eff*dmy, -k*rho_eff*dmz
-
-    def coupled_step(
-        self,
-        u:     torch.Tensor,
-        sigma: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
-               torch.Tensor, torch.Tensor, torch.Tensor]:
-        """One CH step + DNS material fields.  Returns u_new, rho_eff, nu_eff, fx, fy, fz."""
-        u_new   = self.ch.step(u, sigma)
-        rho_eff = self.effective_density(u_new)
-        nu_eff  = self.effective_viscosity(u_new)
-        fx, fy, fz = self.korteweg_force(u_new, sigma)
-        return u_new, rho_eff, nu_eff, fx, fy, fz
+        def coupled_step(
+            self,
+            u:     torch.Tensor,
+            sigma: Optional[torch.Tensor] = None,
+        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
+                   torch.Tensor, torch.Tensor, torch.Tensor]:
+            """One CH step + all coupling fields. Returns u_new, rho_eff, nu_eff, fx, fy, fz."""
+            u_new   = self.ch.step(u, sigma)
+            rho_eff = self.effective_density(u_new)
+            nu_eff  = self.effective_viscosity(u_new)
+            fx, fy, fz = self.korteweg_force(u_new, sigma)
+            return u_new, rho_eff, nu_eff, fx, fy, fz
 
 
 # =============================================================================
