@@ -3,8 +3,14 @@
 # =============================================================================
 # Developer : Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
-# Version   : 6.0 (production — full 3D + Native Full Differentiable + bridge)
+# Version   : 6.1 (full ecosystem integration — CH↔FH bridge + attribution)
 # Year      : 2026
+#
+# AI Development Partners:
+#   Claude   (Anthropic)  — differentiability fixes, bridge protocol design
+#   GPT      (OpenAI)     — algorithmic suggestions
+#   Gemini   (Google)     — numerical scheme cross-validation
+#   DeepSeek              — supplementary code analysis
 #
 # A Fluctuating Hydrodynamics (FH) solver bridging the Structural Calculus
 # Langevin framework to continuum CFD via the Landau–Lifshitz
@@ -75,6 +81,7 @@ from one_core import (
     InterfaceDetectorBase,
     StructuralItoBase,
     LangevinFHBridge,           # Bridge: Langevin → FH (Bug 3 fix)
+    CahnHilliardFHBridge,       # Bridge: CahnHilliard → FH (v3.1)
     ONE_VERSION,
 )
 
@@ -1044,6 +1051,16 @@ class StructuralFluctuatingHydro(nn.Module):
             torch.zeros(config.Nx, config.Ny, config.Nz, dtype=config.dtype),
         )
 
+        # External CH coupling buffers (written by CahnHilliardFHBridge.sync())
+        self.register_buffer(
+            "_ext_rho_eff",
+            torch.zeros(config.Nx, config.Ny, config.Nz, dtype=config.dtype),
+        )
+        self.register_buffer(
+            "_ext_nu_eff",
+            torch.zeros(config.Nx, config.Ny, config.Nz, dtype=config.dtype),
+        )
+
         # Pre-compute 3-D Poisson eigenvalues
         kx = torch.arange(config.Nx, dtype=config.dtype)
         ky = torch.arange(config.Ny, dtype=config.dtype)
@@ -1257,6 +1274,14 @@ class StructuralFluctuatingHydro(nn.Module):
         if self._ext_sigma.any():
             sigma = 0.5 * (sigma + self._ext_sigma.mean())
         self._rho_prev.data = rho.detach().clone()
+
+        # External Cahn-Hilliard coupling: blend density and viscosity fields
+        # (written by CahnHilliardFHBridge.sync() — zero-cost when not connected)
+        if self._ext_rho_eff.any():
+            # Soft blend: weight by volume-fraction field
+            rho = 0.5 * (rho + self._ext_rho_eff)
+        if self._ext_nu_eff.any():
+            nu = 0.5 * (nu + self._ext_nu_eff.mean())
 
         # ── 2. Interface detection ──────────────────────────────────────────
         imask = self.interface_detector(rho, dx, dy, dz)
