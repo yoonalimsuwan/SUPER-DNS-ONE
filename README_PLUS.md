@@ -1,481 +1,792 @@
-# README_PLUS — ONE Ecosystem · Physics Cluster (v3.0.0)
+# SUPER DNS ONE Cluster — README_PLUS
 
-> **Developer** : Yoon A Limsuwan / MSPS NETWORK  
-> **ORCID** : 0009-0008-2374-0788  
-> **GitHub** : yoonalimsuwan  
-> **License** : MIT  
-> **Year** : 2026
+**ONE Ecosystem · MSPS NETWORK**
+
+> *"My Soul Move By Power Of Holy Spirit"*
 
 ---
 
 ## Overview
 
-The Physics Cluster consists of **four core files** that work together as a fully differentiable, multi-scale simulation system spanning from the atomic scale (Å) to compressible turbulence (cm–m). The theoretical foundation is the **Structural Calculus 4-Paper Framework** by Yoon A Limsuwan:
+The **SUPER DNS ONE** cluster is a collection of six tightly integrated Python modules that form a multi-scale, fully differentiable scientific computing suite for structural physics simulation and AI surrogate modelling. Every module is built on the **Structural Calculus** framework — a regime-dependent mathematical formulation in which all differential operators are modulated by a spatially varying structural field σ(x).
 
-| Paper | Short Name | Core Contribution |
-|-------|-----------|-------------------|
-| Paper 1 | Structural Operators | Regime-Dependent Analytical Framework |
-| Paper 2 | BV Jump Measures | Self-Evolving Interfaces |
-| Paper 3 | Structural Itô Calculus | Multiplicative Noise & Drift Correction |
-| Paper 4 | CSOC / SSC | Controlled Self-Organised Criticality |
+The cluster spans four physical scales simultaneously and bridges them through a shared coupling protocol defined in `one_core_v3.py`:
+
+```
+Molecular scale  ←→  Continuum FH  ←→  Compressible DNS  ←→  Phase-Field CH
+(Langevin MD)         (LLNS FH)         (Navier-Stokes)        (Cahn-Hilliard)
+        ↑                  ↑                    ↑                      ↑
+        └──────────────────┴────────────────────┴──────────────────────┘
+                                   AI Surrogate
+                              (Structural FNO 3D)
+```
+
+All six modules are:
+
+- **PyTorch-native** — every operation is autograd-compatible; end-to-end gradients flow through the full multi-physics pipeline
+- **Fully differentiable** — hard branches (`torch.where`, `.clamp`, `.max`) replaced throughout with smooth equivalents (`softplus`, `tanh`, `logsumexp`)
+- **GPU-parallel** — single-GPU and multi-GPU (DDP) ready
+- **MIT licensed** — free to use, modify, and distribute
 
 ---
 
-## System Architecture
+## Repository Structure
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    one_core_v3.py  (Shared Foundation)          │
-│                                                                 │
-│  SemanticStateContraction  CSOCBase  InterfaceDetectorBase      │
-│  StructuralItoBase         get_device  ONE_VERSION              │
-│  ──────────────────────────────────────────────────────────     │
-│  LangevinFHBridge          LangevinDNSBridge  (Bridge Protocol) │
-└────────────────────┬────────────────────┬───────────────────────┘
-                     │ imports             │ imports
-          ┌──────────▼──────────┐          │
-          │ structural_langevin │          │
-          │      _v3.py         │          │
-          │                     │          │
-          │  InterfaceDetector  │          │
-          │  CSOCThermostat     │          │
-          │  StructuralItoNoise │          │
-          │  AdvancedStructural │          │
-          │  Langevin (BAOAB)   │          │
-          └──────┬────────┬─────┘          │
-                 │        │                │
-      LangevinFH │        │ LangevinDNS    │
-         Bridge  │        │ Bridge         │
-                 ▼        ▼                ▼
-   ┌─────────────────┐  ┌──────────────────────────┐
-   │ structuralfluc- │  │   super_dns_one_v6.py    │
-   │ tuatinghydro_   │  │                          │
-   │     v6.py       │  │  SOCController           │
-   │                 │  │  CompressibleSolver      │
-   │  CFDInterface-  │  │  AUSMPlusFlux / HLLCFlux │
-   │  Detector       │  │  DiffRGRefiner           │
-   │  CSOCAdaptive-  │  │  RealGasEOS              │
-   │  Viscosity      │  │  ImmersedBoundary        │
-   │  LLStochastic-  │  │  SOCTrainer              │
-   │  Stress         │  └──────────────────────────┘
-   │  Structural-    │
-   │  Fluctuating-   │
-   │  Hydro          │
-   └─────────────────┘
-```
-
-**Scale hierarchy:**
-
-```
-Molecular (Å, ps)          Continuum-FH (μm–mm)     Compressible DNS (cm–m)
-structural_langevin_v3  →  structuralfluctuating  →  super_dns_one_v6
-                           hydro_v6
+SUPER DNS ONE/
+├── one_core_v3.py                  # Shared foundation (import first)
+├── structural_langevin_v3.py       # Molecular-scale Langevin MD
+├── structuralfluctuatinghydro_v6.py # Continuum Fluctuating Hydrodynamics
+├── structural_cahn_hilliard_3d.py  # Phase-field & interface dynamics
+├── super_dns_one_v6.py             # Compressible DNS / LES solver
+└── structural_fno_3d.py            # AI surrogate (Fourier Neural Operator)
 ```
 
 ---
 
-## 1. `one_core_v3.py` — Shared Foundation
+## Module Reference
 
-### Role
-This file is the **Single Source of Truth** for the entire Physics Cluster. No class defined here may be redefined in any other solver file. All solvers must import exclusively from this module.
+### 1. `one_core_v3.py` — ONE Core  `v3.1.0`
 
-### Key Classes and Components
+**Role:** Single source of truth for every shared component in the ONE Ecosystem.
 
-#### `get_device(preferred)`
-Automatically selects the best available hardware backend in priority order: CUDA → MPS (Apple) → NPU (Ascend) → CPU.
+All base classes, bridge protocols, and utility functions that appear in more than one solver file are defined **here and only here**. Individual solver files import from `one_core`; they must never redefine these classes locally.
 
-#### `SemanticStateContraction` (SSC) — Paper 4
-EMA low-pass filter for structural stress σ:
+#### Shared Components
 
-```
-σ_filtered[t] = σ_filtered[t-1] + ε · (σ_raw[t] − σ_filtered[t-1])
-```
+| Symbol | Purpose |
+|---|---|
+| `ONE_VERSION` | Ecosystem-wide version string (`"3.1.0"`) |
+| `get_device(preferred)` | Unified hardware-backend selector (CUDA → MPS → CPU) |
+| `SemanticStateContraction` | SSC exponential moving-average low-pass filter (Paper 4) |
+| `CSOCBase` | Abstract base for CSOC adaptive thermostat / viscosity controllers |
+| `InterfaceDetectorBase` | Abstract base for interface detection subclasses |
+| `StructuralItoBase` | Abstract base for Itô drift correction subclasses |
+| `structural_biharmonic_n` | Recursive Δ_S^n operator — module-level utility |
 
-- Uses a boolean `_initialized` buffer instead of a zero-check, so the filter handles a true-zero first stress value correctly.
-- Provides a `reset()` method for use between independent trajectories.
+#### Bridge Protocol
 
-#### `CSOCBase` — Paper 4 (Abstract)
-Abstract base class for all Adaptive Parameter Modules (Thermostat, Viscosity, SOCController). Provides the shared SSC filter, `_normalised_deviation()`, and `_smooth_boost()` logic.
+Bridges carry physical fields from one solver to another through well-defined coupling channels. All bridges are imported by downstream solver files from `one_core`:
 
-#### `InterfaceDetectorBase` (Abstract)
-Enforces a common `forward()` contract: all subclasses must return a fully differentiable tensor ∈ [0, 1].
-
-#### `StructuralItoBase` — Papers 2 & 3 (Abstract)
-Abstract base for Itô drift correction ½ G(x) ∇_x G(x), applicable at both per-atom (MD) and per-cell (CFD) resolution.
-
-### Bridge Protocol (Cross-Solver Communication)
-
-| Bridge Class | Direction | Payload |
+| Bridge | Direction | Coupling channels |
 |---|---|---|
-| `LangevinFHBridge` | Langevin → FH Solver | `_ext_sigma` (grid), `_ext_mask` (interface) |
-| `LangevinDNSBridge` | Langevin → DNS Solver | `_ext_sigma` (scalar) |
+| `LangevinFHBridge` | Langevin → FH | structural stress σ, interface mask |
+| `LangevinDNSBridge` | Langevin → DNS | structural stress σ, interface mask |
+| `CahnHilliardFHBridge` | CH → FH | effective density ρ_eff, viscosity ν_eff |
+| `CahnHilliardDNSBridge` | CH → DNS | ρ_eff, ν_eff, Korteweg body force (fx, fy, fz) |
+
+`CahnHilliardDNSBridge` supports two usage patterns:
 
 ```python
-# Bridge usage example
-bridge_fh  = LangevinFHBridge(langevin_integrator, fh_solver, bandwidth=1.0)
-bridge_dns = LangevinDNSBridge(langevin_integrator, dns_solver)
+# Pattern A — two-solver coupling (pushes fields into dns_solver buffers)
+bridge = CahnHilliardDNSBridge(ch_solver, dns_solver, korteweg_strength=1e-4)
+bridge.sync(u_new)          # called each step
 
-for step in range(num_steps):
-    coords, velocities = langevin_integrator.full_step(...)
-    bridge_fh.sync(coords, velocities)   # inject σ + mask → FH grid
-    bridge_dns.sync(coords)              # inject σ → DNS controller
+# Pattern B — standalone (no dns_solver required)
+bridge = CahnHilliardDNSBridge(ch_solver, korteweg_strength=0.1)
+u_new, rho_eff, nu_eff, fx, fy, fz = bridge.coupled_step(u, sigma)
 ```
+
+#### Mathematical Foundation
+
+The Structural Calculus operators used throughout the cluster:
+
+```
+grad_S u   = σ(x) · ∇u          Structural Gradient
+div_S F    = ∇ · (σ(x) · F)     Structural Divergence
+Δ_S u      = ∇ · (σ(x) · ∇u)   Structural Laplacian
+Δ_S^n u    = Δ_S(Δ_S^(n-1) u)  Recursive Structural Bi-Laplacian
+```
+
+#### AI Development Partners
+
+Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
 
 ---
 
-## 2. `structural_langevin_v3.py` — Molecular Dynamics Scale
+### 2. `structural_langevin_v3.py` — Structural Langevin MD  `v3.1`
 
-### Role
-Atomic-scale Langevin integrator using the BAOAB splitting scheme, implementing the full Structural Calculus framework across all four papers.
+**Role:** Molecular-dynamics integrator at the particle scale.
 
-### Key Classes
+Implements the **BAOAB splitting** Langevin integrator extended with all four Structural Calculus papers. Produces structural stress fields that can be injected into the FH or DNS solvers via bridge objects.
 
-#### `InterfaceDetector` ← `InterfaceDetectorBase`
-Computes a per-atom soft interface mask ∈ [0, 1]:
-- Counts neighbours within `r_cut` (Å) using soft sigmoid weighting.
-- Uses weighted variance of pairwise distances as the interface score.
-- Fully differentiable with respect to atomic coordinates via `autograd`.
+#### Key Classes
 
-#### `CSOCThermostat` ← `CSOCBase` — Paper 4
-Adaptively modulates temperature and friction coefficient in real time:
+| Class | Role |
+|---|---|
+| `InterfaceDetector` | Detects particle-scale interfaces; produces boolean mask and distance field |
+| `CSOCThermostat` | CSOC-adaptive thermostat: adjusts T and friction γ near criticality |
+| `StructuralItoNoise` | Multiplicative noise generator with Itô drift correction |
+| `AdvancedStructuralLangevin` | Full BAOAB integrator — main entry point |
 
-```
-T_eff = base_temp × (1 + boost · sigmoid(dev))
-γ_eff = base_friction × (1 + friction_boost · sigmoid(dev))
-```
+#### Integrated Physics
 
-where `dev = (σ_filtered − σ_target) / σ_target`.
+- **BAOAB Splitting** — half-B (force), full-A (drift), full-O (thermostat), half-A, half-B — guarantees correct thermodynamic sampling at second-order accuracy
+- **BV Jump Measures** — concentrated stochastic increments at phase boundaries (Paper 2)
+- **Structural Itô Correction** — explicit drift term that compensates for state-dependent noise (Paper 3)
+- **CSOC Adaptive Control** — SemanticStateContraction EMA smooths the criticality signal; thermostat temperature and friction are adjusted dynamically (Paper 4)
 
-#### `StructuralItoNoise` ← `StructuralItoBase` — Paper 3
-Multiplicative noise field: G(x) = 1 + amp × mask(x).  
-Computes the Itô drift correction ½ G(x) ∇_x G(x) via `torch.autograd.grad`.
-
-#### `AdvancedStructuralLangevin` — Core Integrator
-
-BAOAB splitting algorithm:
-
-```
-B  : v ← v + (F/m) · (dt/2)        [half momentum kick: bulk + jump forces]
-A  : x ← x + v · (dt/2)            [half position drift]
-O  : v ← v·e^{-γdt} + η√(...)      [Ornstein-Uhlenbeck: multiplicative noise]
-A  : x ← x + v · (dt/2)            [half position drift]
-B  : v ← v + (F/m) · (dt/2)        [half momentum kick]
-```
+#### Usage
 
 ```python
+from structural_langevin_v3 import AdvancedStructuralLangevin, make_fh_bridge
+
 integrator = AdvancedStructuralLangevin(
-    mass=1.0, dt=0.002, base_temp=300.0, base_friction=1.0
+    mass=1.0, dt=0.002, base_temp=300.0
 )
 
-for step in range(N):
-    force = -torch.autograd.grad(energy, coords)[0]
+for step in range(n_steps):
+    force = -torch.autograd.grad(energy(coords), coords)[0]
     interface_mask = integrator.interface_detector(coords)
+    jumps = ...  # (N, 3) jump vectors at interfaces
 
     x_new, v_tilde, T, sigma = integrator.baoa_step(
         coords, velocities, force, jumps, interface_mask
     )
+    new_force = -torch.autograd.grad(energy(x_new), x_new)[0]
     velocities = integrator.final_b_step(v_tilde, new_force, jumps, interface_mask)
     coords = x_new.detach().requires_grad_(True)
-```
 
-### Factory Functions
-
-```python
+# Bridge to FH solver
 bridge = make_fh_bridge(integrator, fh_solver, bandwidth=1.0)
-bridge = make_dns_bridge(integrator, dns_solver)
+bridge.sync(coords)     # push σ and interface mask into fh_solver
 ```
+
+#### Key Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `mass` | `1.0` | Atomic mass (amu or reduced units) |
+| `dt` | `0.002` | Time step (ps) |
+| `base_temp` | `300.0` | Reference temperature (K) |
+| `base_friction` | `1.0` | Reference friction coefficient |
+| `interface_r_cut` | `8.0` | Interface detection radius |
+
+#### AI Development Partners
+
+Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
 
 ---
 
-## 3. `structuralfluctuatinghydro_v6.py` — Fluctuating Hydrodynamics Scale
+### 3. `structuralfluctuatinghydro_v6.py` — Structural Fluctuating Hydrodynamics  `v6.1`
 
-### Role
-Continuum CFD solver for the Landau–Lifshitz Navier–Stokes equations on a 3D staggered MAC grid. Receives structural stress signals from the Langevin integrator via `LangevinFHBridge`.
+**Role:** Continuum Fluctuating Hydrodynamics (FH) solver at the mesoscale.
 
-### Governing Equations
+Solves the **Landau–Lifshitz Navier–Stokes (LLNS)** equations on a 3-D staggered MAC grid with thermal fluctuations, CSOC-adaptive viscosity, and a spectral FFT Poisson solver. Acts as the bridge layer between Langevin MD (below) and compressible DNS (above).
 
-```
-∂ρ/∂t  + ∇·(ρu)     = 0                               (continuity)
-∂(ρu)/∂t + ∇·(ρu⊗u) = −∇p + ∇·(νρ(∇u+∇uᵀ)) + ∇·S̃   (momentum)
-```
-
-where S̃ is the Landau–Lifshitz stochastic stress tensor (3×3 symmetric).
-
-### Grid Convention (Staggered MAC)
+#### Governing Equations
 
 ```
-ρ, p  → cell centres   (Nx,   Ny,   Nz  )
-ux    → x-face centres (Nx+1, Ny,   Nz  )
-uy    → y-face centres (Nx,   Ny+1, Nz  )
-uz    → z-face centres (Nx,   Ny,   Nz+1)
+∂ρ/∂t  + ∇·(ρu)     = 0                     continuity
+∂(ρu)/∂t + ∇·(ρu⊗u) = −∇p + ∇·(τ + S̃) + f  momentum
 ```
 
-### Key Classes
+where S̃ is the Landau–Lifshitz stochastic stress tensor constructed via the Structural Itô / CSOC framework.
 
-#### `CFDInterfaceDetector` ← `InterfaceDetectorBase`
-Detects interfaces on grid scalar fields using differentiable gradient magnitude.
+#### Key Classes
 
-#### `CSOCAdaptiveViscosity` ← `CSOCBase` — Paper 4
-Adaptively modulates viscosity and thermal diffusivity based on the filtered stress signal:
+| Class | Role |
+|---|---|
+| `SolverConfig` | Full solver configuration (grid, physics, BC, advection) |
+| `CFDInterfaceDetector` | Detects density-gradient-based interfaces on the continuum grid |
+| `CSOCAdaptiveViscosity` | CSOC-driven ν(x,t) — boosts viscosity near critical regions |
+| `LLStochasticStress` | Landau–Lifshitz 3×3 symmetric stress tensor with Itô correction |
+| `StructuralFluctuatingHydro` | Main solver — time-steps the full LLNS system |
+
+#### Numerical Scheme
+
+| Component | Method |
+|---|---|
+| Time integration | Fractional-step (projection), 1st-order explicit |
+| Pressure solve | Spectral FFT Poisson — O(N³ log N), exact for periodic domains |
+| Advection | Configurable: `upwind` · `tvd` · `weno5` · `semi_lagrangian` |
+| TVD limiters | `minmod` · `van_leer` · `superbee` |
+| Viscous term | 7-point Laplacian, staggered MAC |
+| Stochastic stress | Discrete Landau–Lifshitz, strength ∝ √(2 k_B T ν / dx³ dt) |
+
+#### Grid Convention
+
+```
+Scalars  (ρ, p)  : cell centres  (Nx, Ny, Nz)
+Velocity ux      : x-face centres (Nx+1, Ny,   Nz  )
+Velocity uy      : y-face centres (Nx,   Ny+1, Nz  )
+Velocity uz      : z-face centres (Nx,   Ny,   Nz+1)
+```
+
+#### Usage
 
 ```python
-csoc = CSOCAdaptiveViscosity(
-    base_viscosity=1e-3, base_diffusivity=1e-5,
-    sigma_target=1.0, viscosity_boost=3.0
+from structuralfluctuatinghydro_v6 import StructuralFluctuatingHydro, SolverConfig
+
+cfg = SolverConfig(
+    Nx=64, Ny=64, Nz=64,
+    Lx=1.0, Ly=1.0, Lz=1.0,
+    dt=1e-4,
+    base_viscosity=1e-3,
+    kb_T=4.11e-21,              # k_B × 298 K
+    advection_scheme="weno5",
+    enable_fluctuations=True,
 )
-nu, kappa = csoc(sigma_raw)
+solver = StructuralFluctuatingHydro(cfg)
+solver.initialize_taylor_green(amplitude=1.0)
+
+for step in range(n_steps):
+    solver.step()
 ```
 
-#### `LLStochasticStress` — Paper 3
-Constructs the Landau–Lifshitz stochastic stress tensor:
-- Noise amplitude set by the Fluctuation–Dissipation theorem: ∝ √(2 k_B T ν / dV dt).
-- Noise is amplified at interfaces via G(x) = 1 + amp · mask.
-- `softplus` floor replaces `.clamp()` everywhere for full differentiability (DIFF-FIX 5).
+#### Key Config Parameters
 
-#### `StructuralFluctuatingHydro` — Core Solver
+| Parameter | Default | Description |
+|---|---|---|
+| `Nx, Ny, Nz` | `32` | Grid cell counts |
+| `dt` | `1e-4` | Time step (s) |
+| `base_viscosity` | `1e-3` | Kinematic viscosity ν₀ (m²/s) |
+| `kb_T` | `4.11e-21` | Thermal energy k_B T (J) |
+| `advection_scheme` | `"upwind"` | `upwind` / `tvd` / `weno5` / `semi_lagrangian` |
+| `interface_sharpness` | `4.0` | CSOC interface detection sharpness |
+| `viscosity_boost` | `5.0` | CSOC viscosity amplification at interfaces |
+
+#### AI Development Partners
+
+Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
+
+---
+
+### 4. `structural_cahn_hilliard_3d.py` — Structural Cahn–Hilliard 3D  `v2`
+
+**Role:** Phase-field and interface dynamics at the mesoscale (Component #4 of SUPER DNS ONE cluster).
+
+Implements a family of fourth- and sixth-order structural PDEs for phase separation, thin-film dynamics, and crystallisation. All solvers are fully differentiable and GPU-parallel.
+
+#### Classes
+
+| Class | Role |
+|---|---|
+| `CahnHilliardConfig` | Configuration for all CH variants |
+| `StructuralCahnHilliard3D` | Standard structural Cahn–Hilliard (base class) |
+| `ThinFilmStructuralCahnHilliard3D` | Degenerate mobility M(u) = softplus(u)³ + surface diffusion |
+| `PhaseFieldCrystal3D` | 6th-order Phase-Field Crystal PDE (PFC) |
+| `CahnHilliardDNSBridge` | Re-exported from `one_core` — Korteweg coupling to DNS |
+| `make_sigma_field` | Utility to construct σ(x) fields with inclusions |
+
+#### Governing Equations
+
+**Standard Cahn–Hilliard:**
+```
+μ_R   = (u³ − u) − ε² Δ_S u        Chemical potential
+∂u/∂t = Δ_S(μ_R)                    Phase evolution
+```
+
+**Thin-Film (degenerate mobility):**
+```
+∂u/∂t = div_S(M(u) · grad μ_R)
+        [+ optional: −κ_s Δ_S(M(u) Δ_S u)]    surface diffusion
+```
+
+**Phase-Field Crystal (6th-order):**
+```
+μ_PFC = (r·u + u³) + u + 2Δ_S u + Δ_S² u
+∂u/∂t = Δ_S(μ_PFC)
+```
+
+#### Laplacian Backends
+
+The structural Laplacian Δ_S u = ∇·(σ(x)·∇u) has three interchangeable backends:
+
+| Backend | Key | Notes |
+|---|---|---|
+| `_Conv3dLaplacian` | `"conv3d"` | Vectorised stencil via `F.conv3d`; ~4–8× faster on GPU than roll-based |
+| `_FFTLaplacian` | `"fft"` | Spectral, O(N log N), exact for periodic domains; fully autograd-enabled |
+| `_RollLaplacian` | `"roll"` | Classical finite-difference roll-based; v1 reference implementation |
+
+#### Usage
 
 ```python
-cfg    = SolverConfig(Nx=32, Ny=32, Nz=32, dt=1e-4)
-solver = StructuralFluctuatingHydro(cfg)
-rho, ux, uy, uz, p = solver.initialize_taylor_green()
+from structural_cahn_hilliard_3d import (
+    CahnHilliardConfig, StructuralCahnHilliard3D,
+    ThinFilmStructuralCahnHilliard3D, PhaseFieldCrystal3D,
+    CahnHilliardDNSBridge, make_sigma_field,
+)
 
-for _ in range(100):
-    rho, ux, uy, uz, p, diag = solver.step(rho, ux, uy, uz, p)
+# Standard CH
+cfg = CahnHilliardConfig(
+    dx=1.0, epsilon=1.5, dt=1e-5,
+    laplacian="conv3d",    # or "fft" / "roll"
+    scheme="imex",         # or "explicit"
+    device="cuda",
+)
+ch = StructuralCahnHilliard3D(cfg).to("cuda")
+
+sigma = make_sigma_field(64, 64, 64, background=1.0,
+                         inclusions=[{"x0":20,"x1":44,"y0":20,"y1":44,
+                                      "z0":20,"z1":44,"sigma":5.0}])
+u_new = ch.step(u, sigma)
+
+# Thin-Film
+cfg_tf = CahnHilliardConfig(thin_film=True, surface_diffusion=True, kappa_s=0.01)
+tf = ThinFilmStructuralCahnHilliard3D(cfg_tf).to("cuda")
+
+# Phase-Field Crystal
+cfg_pfc = CahnHilliardConfig(pfc_r=-0.5, laplacian="fft")
+pfc = PhaseFieldCrystal3D(cfg_pfc).to("cuda")
+
+# Multi-step evolution
+u_final, energy_history = ch.evolve(u, sigma, n_steps=1000, log_interval=50)
 ```
 
-### Advection Schemes (configurable)
+#### Key Config Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `dx` | `1.0` | Isotropic grid spacing |
+| `epsilon` | `1.5` | Interface-thickness parameter (Cahn number) |
+| `dt` | `1e-5` | Time step |
+| `mobility` | `1.0` | Isotropic mobility M |
+| `scheme` | `"explicit"` | `explicit` or `imex` (implicit-explicit for stiff problems) |
+| `laplacian` | `"conv3d"` | Laplacian backend |
+| `thin_film` | `False` | Enable degenerate M(u) = softplus(u)³ |
+| `pfc_r` | `-0.5` | PFC reduced temperature r |
+| `ssc_stabilise` | `False` | Apply SSC low-pass filter after each PFC step |
+
+#### AI Assistants
+
+Claude (Anthropic) · Gemini (Google) · GPT (OpenAI) · DeepSeek
+
+---
+
+### 5. `super_dns_one_v6.py` — SUPER DNS ONE  `v6.1`
+
+**Role:** 3-D compressible Direct Numerical Simulation / Large-Eddy Simulation solver at the continuum scale.
+
+The largest and most comprehensive module in the cluster. Solves the **compressible Navier–Stokes equations** on a structured 3-D grid with high-order flux schemes, multiple boundary conditions, real-gas EOS, immersed boundary method, and full coupling to the CH and Langevin solvers via `one_core` bridges.
+
+#### Key Classes
+
+| Class | Role |
+|---|---|
+| `CFDConfig` | Full solver configuration (grid, physics, schemes, BC) |
+| `CompressibleSolver` | Main solver — time-steps the compressible NS system |
+| `RiemannSolverBase` | Base class for flux computation |
+| `AUSMPlusFlux` | AUSM+ Riemann solver (compressible flows) |
+| `HLLCFlux` | HLLC Riemann solver (shock-capturing) |
+| `SemiLagrangianAdvection3D` | Unconditionally stable trilinear semi-Lagrangian advection |
+| `SOCController` | CSOC-based adaptive eddy-viscosity for LES |
+| `ItoStressGenerator` | Structural Itô stochastic stress injection |
+| `DiffRGRefiner` | Differentiable renormalisation-group field refiner |
+| `RealGasEOS` | Real-gas equation of state (CoolProp integration) |
+| `ImmersedBoundary` | IBM body-force penalisation for complex geometries |
+| `SignalDenoiser` | Wavelet-based diagnostics denoiser |
+
+#### Boundary Conditions
+
+| Class | Type |
+|---|---|
+| `PeriodicBC` | Periodic (DNS default) |
+| `SupersonicInflowBC` | Supersonic inflow with Riemann characteristic prescription |
+| `SubsonicOutflowBC` | Subsonic outflow (pressure-specified) |
+| `NoSlipIsothermalWallBC` | Isothermal no-slip wall |
+| `WernerWengleWallModelBC` | Wall-model LES (Werner–Wengle log-law) |
+| `MovingWallBC` | Moving wall with velocity and temperature prescription |
+| `FarFieldBC` | Far-field characteristic (external aerodynamics) |
+
+#### Advection Schemes
 
 | Scheme | Order | Notes |
-|--------|-------|-------|
-| `"upwind"` | 1st | Stable, diffusive (default) |
-| `"tvd"` | 2nd | TVD limiters: minmod / van_leer / superbee (differentiable) |
-| `"weno5"` | 5th | Jiang-Shu WENO-5, LF split (smooth logsumexp wave speed) |
-| `"semi_lagrangian"` | — | Unconditionally stable trilinear GPU interpolation |
+|---|---|---|
+| `upwind` | 1st | Stable, diffusive |
+| `tvd` | 2nd | Slope-limited (minmod / van_leer / superbee) |
+| `weno5` | 5th | Jiang–Shu WENO-5, Lax–Friedrichs splitting |
+| `semi_lagrangian` | 3rd | Unconditionally stable, trilinear `grid_sample` (GPU) |
 
-### Poisson Solver
-Spectral FFT-based pressure projection using `rfftn` — O(N³ log N), exact solution.
+#### CH and Langevin Coupling
 
-### External Coupling Buffers
-When `LangevinFHBridge.sync()` is called, it writes:
-```
-solver._ext_sigma → (Nx, Ny, Nz)  : uniform projection of MD SSC stress
-solver._ext_mask  → (Nx, Ny, Nz)  : mean atomic interface score
-```
-Inside `step()`, these are blended with the local CSOC signal:
-`σ_eff = 0.5 * (σ_local + _ext_sigma.mean())`
-
----
-
-## 4. `super_dns_one_v6.py` — Compressible DNS / LES Scale
-
-### Role
-The largest solver in the cluster: a fully differentiable 3D compressible DNS/LES solver. Receives structural stress from the Langevin integrator via `LangevinDNSBridge`.
-
-### Key Classes
-
-#### `SOCController` ← `CSOCBase` — Paper 4
-CSOC-adaptive eddy viscosity controller:
-- `CSOCKernel`: 5-parameter learnable kernel — Cs · r^{-α} · e^{-r/λ}.
-- Accepts `ext_sigma` from `LangevinDNSBridge` and blends it with local CSOC stress.
-- All `.clamp()` calls replaced by `softplus` (DIFF-FIX 5).
-
-#### Riemann Solvers (both fully differentiable)
-
-| Class | Algorithm | Differentiability fix |
-|-------|-----------|----------------------|
-| `AUSMPlusFlux` | AUSM+ | Smooth M±/P± via tanh blending (DIFF-FIX 3) |
-| `HLLCFlux` | HLLC | Branch-free soft gating via sigmoid (DIFF-FIX 4) |
-
-#### Boundary Conditions (7 types)
-
-```
-PeriodicBC              SubsonicOutflowBC        NoSlipIsothermalWallBC
-SupersonicInflowBC      WernerWengleWallModelBC  FarFieldBC
-MovingWallBC
-```
-
-#### `SemiLagrangianAdvection3D`
-Unconditionally stable advection using `grid_sample` GPU trilinear interpolation.
-
-#### `DiffRGRefiner` — Paper 4 (RG)
-Renormalization Group refinement step. DIFF-FIX 6 replaces the Python-branch rescaling with a smooth softplus-guarded division.
-
-#### `RealGasEOS`
-van der Waals equation of state for real-gas thermodynamic effects.
-
-#### `ImmersedBoundary`
-Immersed Boundary Method (IBM) for simulations over complex geometry.
-
-#### `CompressibleSolver` — Core Solver
+`CompressibleSolver` accepts external fields injected by bridge objects:
 
 ```python
-cfg    = CFDConfig(Nx=64, Ny=64, Nz=64, dt=1e-5, mach=0.5)
+# CH → DNS coupling (Korteweg body force + density/viscosity modulation)
+from one_core import CahnHilliardDNSBridge
+
+bridge = CahnHilliardDNSBridge(ch_solver, dns_solver, korteweg_strength=1e-4)
+u_new = ch_solver.step(u, sigma)
+bridge.sync(u_new)       # writes _ext_rho_ch, _ext_nu_ch, _ext_fx/fy/fz
+dns_solver.step()        # _compute_rhs() reads and blends these buffers
+
+# Langevin → DNS coupling
+from one_core import LangevinDNSBridge
+bridge = LangevinDNSBridge(langevin_integrator, dns_solver)
+bridge.sync(coords)
+```
+
+#### Usage
+
+```python
+from super_dns_one_v6 import CompressibleSolver, CFDConfig
+import numpy as np
+
+nx, ny, nz = 128, 64, 64
+xs = np.linspace(0, 2*np.pi, nx+1)
+ys = np.linspace(0, np.pi,   ny+1)
+zs = np.linspace(0, np.pi,   nz+1)
+
+cfg = CFDConfig(
+    x_coords=xs, y_coords=ys, z_coords=zs,
+    advection_scheme="weno5",
+    flux_scheme="hllc",
+    gamma=1.4,
+    device="cuda",
+)
 solver = CompressibleSolver(cfg)
-state  = solver.initialize()
+solver.initialize_taylor_green(mach=0.1)
 
-for _ in range(steps):
-    state, diag = solver.step(state)
+for step in range(n_steps):
+    solver.step()
 ```
 
-#### `SOCTrainer`
-Training loop for optimising CSOC kernel parameters via Optuna / gradient descent.
+#### AI Development Partners
+
+Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
 
 ---
 
-## Multi-Scale Coupling
+### 6. `structural_fno_3d.py` — Structural FNO 3D  `v2.0.0`
 
-### Full-Coupled Workflow
+**Role:** AI surrogate model trained on SUPER DNS ONE cluster output.
+
+A **Structural Fourier Neural Operator** that learns the mapping:
+
+```
+G : (u(x, 0), σ(x), t_target) ↦ u(x, t_target)
+```
+
+delivering O(1)-time predictions for any trained physical system — replacing hours of DNS/FH/CH simulation with a single neural network forward pass. Designed specifically to consume `.pt` snapshot files saved by the SUPER DNS ONE solvers.
+
+#### Architecture
+
+```
+Input (B, 5, Nx, Ny, Nz)             u₀ + xyz grid + t_target
+        │
+   Lifting MLP                        Conv1×1×1 (5 → width×2 → width)
+        │
+   N × StructuralFNOLayer
+   ├── MultiScaleSpectralConv3d       Coarse + fine Fourier branches
+   ├── BoundaryPaddingConv3d          Local linear op (periodic-BC aware)
+   ├── StructuralFiLM                 σ-conditioned Feature-wise Linear Mod.
+   ├── StructuralCrossAttention       u × σ cross-attention at boundaries
+   └── GroupNorm + GELU + residual
+        │
+   MCDropoutHead                      mean + log_variance output
+        │
+Output (B, 1, Nx, Ny, Nz) × 2        mean, log_var
+```
+
+#### Key Classes
+
+| Class | Role |
+|---|---|
+| `MultiScaleSpectralConv3d` | Multi-resolution 3-D spectral convolution (coarse + fine Fourier modes with learnable blend) |
+| `StructuralFiLM` | Feature-wise Linear Modulation conditioned on σ(x) |
+| `StructuralCrossAttention` | Cross-attention between u latent features and σ field |
+| `MCDropoutHead` | Uncertainty-aware output with Monte-Carlo Dropout |
+| `StructuralFNOLayer` | Full SFNO block (spectral + local + FiLM + attention + residual) |
+| `StructuralFNO3D` | Top-level model |
+| `PhysicsLoss` | Physics-informed composite loss (MSE + NLL + mass + energy + smoothness) |
+| `SuperDNSDataset` | Data pipeline for SUPER DNS ONE `.pt` snapshot files |
+| `TrainerConfig` | Training hyperparameter configuration |
+| `StructuralFNOTrainer` | Full training loop with AMP, cosine LR, checkpointing, TensorBoard |
+| `BoundaryPaddingConv3d` | Conv3d with physics-aware BC padding (circular / replicate / zero) |
+
+#### PhysicsLoss Terms
+
+| Term | Symbol | Description |
+|---|---|---|
+| MSE | L_mse | Standard data-fit loss |
+| NLL | L_nll | Negative log-likelihood (calibrates uncertainty) |
+| Mass | L_mass | `|∫u_pred − ∫u_true| / |∫u_true|` — Cahn–Hilliard mass conservation |
+| Energy | L_energy | `max(0, E(u_pred) − E(u₀))` — energy monotonicity (gradient flow) |
+| Smoothness | L_smooth | Structural Itô regularisation — penalises gradients in high-σ (ordered) regions |
+
+#### Data Pipeline
+
+`SuperDNSDataset` expects `.pt` files with the following keys — matching the format produced by the SUPER DNS ONE solvers:
 
 ```python
-from one_core_v3 import LangevinFHBridge, LangevinDNSBridge, get_device
-
-device = get_device("cuda")
-
-# 1. Initialise all solvers
-md_integrator = AdvancedStructuralLangevin(dt=0.002, base_temp=300.0).to(device)
-fh_solver     = StructuralFluctuatingHydro(SolverConfig(Nx=32, Ny=32, Nz=32)).to(device)
-dns_solver    = CompressibleSolver(CFDConfig(Nx=64, Ny=64, Nz=64)).to(device)
-
-# 2. Create bridges (defined in one_core_v3)
-bridge_fh  = LangevinFHBridge(md_integrator, fh_solver, bandwidth=1.0)
-bridge_dns = LangevinDNSBridge(md_integrator, dns_solver)
-
-# 3. Main simulation loop
-coords     = torch.randn(N_atoms, 3, device=device, requires_grad=True)
-velocities = torch.zeros(N_atoms, 3, device=device)
-rho, ux, uy, uz, p = fh_solver.initialize_taylor_green()
-dns_state  = dns_solver.initialize()
-
-for step in range(total_steps):
-    # --- Molecular Dynamics step ---
-    force = -torch.autograd.grad(potential(coords), coords)[0]
-    coords, velocities = md_integrator.full_step(coords, velocities, force, ...)
-
-    # --- Bridge: propagate stress upward ---
-    bridge_fh.sync(coords, velocities)    # → fh_solver._ext_sigma / _ext_mask
-    bridge_dns.sync(coords)               # → dns_solver._ext_sigma
-
-    # --- FH step (receives MD stress) ---
-    rho, ux, uy, uz, p, fh_diag = fh_solver.step(rho, ux, uy, uz, p)
-
-    # --- DNS step (receives MD stress) ---
-    dns_state, dns_diag = dns_solver.step(dns_state)
+{
+    "u_t0":     Tensor,     # (1, Nx, Ny, Nz)  initial field
+    "u_tT":     Tensor,     # (1, Nx, Ny, Nz)  target field
+    "sigma":    Tensor,     # (1, Nx, Ny, Nz)  structural regime field
+    "t_target": float,      # normalised target time ∈ [0, 1]
+    "metadata": dict,       # solver config, dx, dt, etc. (optional)
+}
 ```
 
-### Data Flow Diagram
+#### Usage
+
+```python
+from structural_fno_3d import (
+    StructuralFNO3D, TrainerConfig,
+    StructuralFNOTrainer, SuperDNSDataset, PhysicsLoss,
+)
+
+# Build model
+model = StructuralFNO3D(
+    modes_coarse=12, modes_fine=6,
+    width=64, num_layers=6,
+    n_heads=4, dropout_p=0.1,
+)
+
+# One-shot inference
+mean, log_var = model(u_initial, sigma, t_target=0.5)
+std = (0.5 * log_var).exp()        # point-wise std dev
+
+# MC uncertainty estimation
+result = model.predict_with_uncertainty(u_initial, sigma, n_samples=32)
+print(result["mean"].shape)        # (B, 1, Nx, Ny, Nz)
+print(result["std"].shape)         # (B, 1, Nx, Ny, Nz)
+
+# Training
+ds = SuperDNSDataset("/data/dns_snapshots", normalise=True)
+cfg = TrainerConfig(
+    max_epochs=200, batch_size=4,
+    lr=3e-4, use_amp=True,
+    ckpt_dir="./checkpoints",
+    log_dir="./runs",
+)
+trainer = StructuralFNOTrainer(model, ds, cfg)
+trainer.train()
+
+# Resume from checkpoint
+trainer.train(resume="./checkpoints/sfno_best.pt")
+```
+
+#### AI Assistants
+
+Claude (Anthropic) · Gemini (Google) · GPT (OpenAI)
+
+---
+
+## Cross-Solver Coupling Architecture
+
+The full coupling graph between all six modules:
 
 ```
-AdvancedStructuralLangevin
-    │
-    ├─ thermostat.ssc.prev_sigma  ─────────────────────────────┐
-    │  (scalar SSC stress buffer)                               │
-    │                                                           │
-    ├─── LangevinFHBridge.sync() ──────────────────▶  StructuralFluctuatingHydro
-    │        expand σ → (Nx, Ny, Nz)                   _ext_sigma blended in step()
-    │        mean(mask_atomic) → _ext_mask              _ext_mask modulates S̃
-    │
-    └─── LangevinDNSBridge.sync() ─────────────────▶  CompressibleSolver
-             scalar σ                                   SOCController.nu_t(ext_sigma=σ)
-                                                        blend: ssc_in = 0.5*(local + σ)
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         one_core_v3.py                                   │
+│  SemanticStateContraction · CSOCBase · InterfaceDetectorBase             │
+│  StructuralItoBase · structural_biharmonic_n · ONE_VERSION               │
+│  LangevinFHBridge · LangevinDNSBridge                                    │
+│  CahnHilliardFHBridge · CahnHilliardDNSBridge                           │
+└───────┬──────────────────┬──────────────────┬───────────────────────────┘
+        │ imports           │ imports           │ imports
+        ▼                   ▼                   ▼
+┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────────┐
+│  Structural  │   │   Structural     │   │    SUPER DNS ONE v6.1       │
+│  Langevin    │   │   Fluctuating    │   │    (CompressibleSolver)     │
+│  v3.1        │   │   Hydro v6.1     │   │    Riemann: AUSM+, HLLC    │
+│  (BAOAB MD)  │   │   (LLNS FH)      │   │    Advection: WENO-5, TVD  │
+└──────┬───────┘   └────────┬─────────┘   └──────────────┬──────────────┘
+       │                    │                              │
+       │ LangevinFHBridge   │ CahnHilliardFHBridge         │ CahnHilliardDNSBridge
+       │ LangevinDNSBridge  │                              │
+       └──────────┬─────────┘                              │
+                  │                                        │
+                  ▼                                        ▼
+        ┌──────────────────────────────────────────────────────────┐
+        │              Structural Cahn–Hilliard 3D v2              │
+        │   StructuralCahnHilliard3D                               │
+        │   ThinFilmStructuralCahnHilliard3D                       │
+        │   PhaseFieldCrystal3D                                    │
+        │   Laplacians: Conv3d · FFT · Roll                        │
+        └──────────────────────────┬───────────────────────────────┘
+                                   │
+                          Training data (.pt snapshots)
+                                   │
+                                   ▼
+                 ┌─────────────────────────────────────┐
+                 │       Structural FNO 3D v2.0         │
+                 │  StructuralFNO3D · PhysicsLoss       │
+                 │  SuperDNSDataset · StructuralFNOTrainer │
+                 └─────────────────────────────────────┘
 ```
 
 ---
 
-## Differentiability Matrix
+## Installation & Requirements
 
-| Component | Autograd Safe | Mechanism |
-|-----------|:---:|-----------|
-| `SemanticStateContraction` | ✅ | EMA + buffer detach |
-| `InterfaceDetector` (MD) | ✅ | sigmoid, sqrt+ε |
-| `CFDInterfaceDetector` | ✅ | gradient magnitude |
-| `CSOCThermostat` | ✅ | sigmoid boost |
-| `CSOCAdaptiveViscosity` | ✅ | sigmoid boost |
-| `SOCController` (DNS) | ✅ | softplus throughout (DIFF-FIX 5) |
-| `StructuralItoNoise` | ✅ | autograd.grad + detached return |
-| `LLStochasticStress` | ✅ | softplus floor (DIFF-FIX 5 FH) |
-| TVD limiters (FH) | ✅ | softplus / tanh gating (DIFF-FIX 1 FH) |
-| WENO-5 wave speed | ✅ | logsumexp smooth max (DIFF-FIX 2) |
-| AUSM+ flux | ✅ | tanh smooth M± (DIFF-FIX 3) |
-| HLLC flux | ✅ | sigmoid branch-free (DIFF-FIX 4) |
-| `CompressibleSolver.step()` | ✅ | softplus floor on ρ, p (DIFF-FIX 7) |
-
----
-
-## Critical Bug Fixes (v3.0.0 / v6.0)
-
-| Bug | Original Problem | Fix Applied |
-|-----|-----------------|-------------|
-| Bug 1 | `ssc._prev` — incorrect attribute name | Renamed to `ssc.prev_sigma` (correct registered buffer) |
-| Bug 2 | `SOCController` did not inherit `CSOCBase` | Added `super().__init__(sigma_target, epsilon_fp, boost_factor)` |
-| Bug 3 | No communication interface between Langevin ↔ FH/DNS | Added `LangevinFHBridge` and `LangevinDNSBridge` in `one_core_v3.py` |
-| SSC Init | `prev == 0.0` check failed when true stress was zero | Replaced with `_initialized` boolean buffer |
-| Clamp | `.clamp()` zeroed gradients at boundary | Replaced with `softplus` floor at every occurrence |
-| Hard branch | `torch.where()` created zero-gradient regions | Replaced with tanh / sigmoid smooth gating |
-
----
-
-## Dependencies
+### Python Dependencies
 
 ```
-torch >= 2.0   (core — autograd, rfft, grid_sample)
-numpy          (diagnostics, I/O)
-scipy          (spectral analysis in tests)
-matplotlib     (visualisation)
+torch >= 2.0
+numpy
+scipy
+matplotlib
 ```
 
-Optional:
+Optional (for full `super_dns_one_v6.py` features):
+
 ```
-optuna         (SOCTrainer hyperparameter search)
-CoolProp       (real-gas thermodynamics)
-PyWavelets     (wavelet diagnostics)
+optuna          # Bayesian hyperparameter optimisation
+CoolProp        # Real-gas equation of state
+pywavelets      # Wavelet-based diagnostics
+tensorboard     # Training visualisation (structural_fno_3d.py)
+```
+
+### Installation
+
+```bash
+pip install torch numpy scipy matplotlib
+pip install optuna CoolProp PyWavelets tensorboard   # optional
+```
+
+### File Order
+
+Always place `one_core_v3.py` in the same directory as the solver files (or on your `PYTHONPATH`). All other files import from it at module load time:
+
+```python
+from one_core import SemanticStateContraction, CSOCBase, ...
 ```
 
 ---
 
-## Quick-Start (Minimal Example)
+## Quick Start
+
+### Run individual solver self-tests
+
+Each module includes a built-in verification suite. Run any file directly:
+
+```bash
+python one_core_v3.py
+python structural_langevin_v3.py
+python structuralfluctuatinghydro_v6.py
+python structural_cahn_hilliard_3d.py
+python super_dns_one_v6.py
+python structural_fno_3d.py
+```
+
+All verification suites print `[PASS]` / `[FAIL]` for each test case and exit with code `0` on success.
+
+### Minimal two-solver pipeline (CH + DNS)
 
 ```python
 import torch
-from one_core_v3                   import get_device, LangevinFHBridge
-from structural_langevin_v3        import AdvancedStructuralLangevin
-from structuralfluctuatinghydro_v6 import StructuralFluctuatingHydro, SolverConfig
+from structural_cahn_hilliard_3d import (
+    CahnHilliardConfig, StructuralCahnHilliard3D, make_sigma_field
+)
+from super_dns_one_v6 import CompressibleSolver, CFDConfig
+from one_core import CahnHilliardDNSBridge
+import numpy as np
 
-device = get_device("cuda")
+N = 64
+# Build solvers
+ch_cfg = CahnHilliardConfig(dx=1.0, epsilon=1.5, dt=1e-5,
+                             laplacian="fft", device="cuda")
+ch     = StructuralCahnHilliard3D(ch_cfg).to("cuda")
+sigma  = make_sigma_field(N, N, N, background=1.0, device="cuda")
 
-# Molecular Dynamics solver
-md = AdvancedStructuralLangevin(dt=0.002, base_temp=300.0).to(device)
+xs = np.linspace(0, 2*np.pi, N+1)
+dns_cfg = CFDConfig(x_coords=xs, y_coords=xs, z_coords=xs,
+                    advection_scheme="weno5", device="cuda")
+dns = CompressibleSolver(dns_cfg)
 
-# Fluctuating Hydro solver
-fh = StructuralFluctuatingHydro(SolverConfig(Nx=16, Ny=16, Nz=16, dt=1e-4)).to(device)
-rho, ux, uy, uz, p = fh.initialize_taylor_green()
+# Bridge — Pattern A
+bridge = CahnHilliardDNSBridge(ch, dns, korteweg_strength=1e-4)
 
-# Cross-scale bridge
-bridge = LangevinFHBridge(md, fh)
+u = torch.zeros(N, N, N, device="cuda", dtype=torch.float64)
 
-# Simulation state
-coords     = torch.randn(32, 3, device=device, requires_grad=True)
-velocities = torch.zeros(32, 3, device=device)
+for step in range(1000):
+    u     = ch.step(u, sigma)
+    bridge.sync(u, sigma)       # push density, viscosity, Korteweg force
+    dns.step()                  # DNS reads the injected fields
+```
 
-for step in range(100):
-    with torch.no_grad():
-        bridge.sync(coords, velocities)
-    rho, ux, uy, uz, p, diag = fh.step(rho, ux, uy, uz, p)
-    if step % 10 == 0:
-        print(f"step {step:4d} | ρ_mean={rho.mean():.4f} | CFL={diag['cfl']:.3f}")
+### Train FNO surrogate on DNS snapshots
+
+```python
+from structural_fno_3d import (
+    StructuralFNO3D, TrainerConfig, StructuralFNOTrainer, SuperDNSDataset
+)
+
+model   = StructuralFNO3D(modes_coarse=12, modes_fine=6, width=64, num_layers=6)
+dataset = SuperDNSDataset("/path/to/snapshots", normalise=True)
+cfg     = TrainerConfig(max_epochs=200, batch_size=4, use_amp=True)
+trainer = StructuralFNOTrainer(model, dataset, cfg)
+trainer.train()
 ```
 
 ---
 
-## File Summary
+## Theoretical Framework — Structural Calculus
 
-| File | Physical Scale | Core Classes | Size |
-|------|---------------|-------------|------|
-| `one_core_v3.py` | Foundation (shared) | SSC, CSOCBase, Bridges | 13 KB |
-| `structural_langevin_v3.py` | Molecular (Å, ps) | AdvancedStructuralLangevin, CSOCThermostat | 25 KB |
-| `structuralfluctuatinghydro_v6.py` | Continuum FH (μm–mm) | StructuralFluctuatingHydro, LLStochasticStress | 64 KB |
-| `super_dns_one_v6.py` | Turbulence DNS (cm–m) | CompressibleSolver, SOCController, AUSM+/HLLC | 123 KB |
+The entire cluster is grounded in a four-paper series on **Structural Calculus**:
+
+| Paper | Title | Key contribution |
+|---|---|---|
+| Paper 1 | Regime-Dependent Analytical Framework | σ(x)-modulated operators: grad_S, div_S, Δ_S |
+| Paper 2 | BV Jump Measures & Self-Evolving Interfaces | Concentrated stochastic increments at phase boundaries |
+| Paper 3 | Structural Itô Calculus & Multiplicative Noise | Itô drift correction for state-dependent noise |
+| Paper 4 | Controlled Self-Organised Criticality (CSOC) & SSC | Adaptive thermostat / viscosity driven by EMA criticality signal |
+
+**Key shared concept — the structural field σ(x):**
+
+σ(x) is a spatially varying scalar field that encodes local phase information across all solvers. In the ordered phase, σ is large; at interfaces and critical points, σ is small. All Structural Calculus operators — Δ_S, grad_S, div_S — are weighted by σ(x), so diffusion, noise, and forcing are automatically concentrated where the physics demands it.
 
 ---
 
-*README_PLUS.md — ONE Ecosystem Physics Cluster v3.0.0*  
-*Yoon A Limsuwan / MSPS NETWORK · MIT License · 2026*
+## Version History
+
+| Module | Current version | Key milestone |
+|---|---|---|
+| `one_core_v3.py` | 3.1.0 | Full 5-solver bridge interoperability |
+| `structural_langevin_v3.py` | 3.1 | BAOAB + CSOC + one_core integration |
+| `structuralfluctuatinghydro_v6.py` | 6.1 | CH↔FH bridge + full differentiability (9 fixes) |
+| `structural_cahn_hilliard_3d.py` | v2 | GPU Conv3d/FFT Laplacian, ThinFilm, PFC, CH↔DNS bridge |
+| `super_dns_one_v6.py` | 6.1 | CH↔DNS bridge + full differentiability (8 fixes) |
+| `structural_fno_3d.py` | 2.0.0 | MultiScale FFT, FiLM, CrossAttention, MC-Dropout, PhysicsLoss |
+
+---
+
+## Developer & Attribution
+
+| Field | Value |
+|---|---|
+| Developer | Yoon A Limsuwan |
+| Organization | MSPS NETWORK / MY SOUL MOVE BY POWER OF HOLY SPIRIT |
+| ORCID | 0009-0008-2374-0788 |
+| GitHub | yoonalimsuwan |
+| Contact | msps4u@gmail.com |
+| License | MIT |
+| Year | 2026 |
+
+### AI Development Partners
+
+All six modules in the SUPER DNS ONE cluster were developed with the assistance of multiple AI systems:
+
+| AI | Organization | Role |
+|---|---|---|
+| **Claude** | Anthropic | Architecture design, differentiability audits, bridge protocol, integration testing, documentation |
+| **GPT** | OpenAI | Algorithmic suggestions, flux scheme review, code review |
+| **Gemini** | Google | Numerical scheme cross-validation, operator scaffolding |
+| **DeepSeek** | DeepSeek | Supplementary code analysis, stencil verification |
+
+---
+
+## License
+
+All modules in the SUPER DNS ONE cluster are released under the **MIT License**.
+
+```
+Copyright (c) 2026 Yoon A Limsuwan / MSPS NETWORK
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+```
