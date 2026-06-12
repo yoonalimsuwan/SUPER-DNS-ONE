@@ -457,16 +457,19 @@ class CahnHilliardFHBridge:
             ).to(dev)
 
 
-class CahnHilliardDNSBridge:
+class CahnHilliardDNSBridge(nn.Module):
     """
     Bridge: injects Cahn-Hilliard phase-field material properties and
     Korteweg capillary body forces into the DNS/LES compressible solver.
 
+    This is the **canonical implementation** used by all ONE Ecosystem
+    solvers.  Do not redefine this class in individual solver files.
+
     Coupling channels (CH → DNS)
     ─────────────────────────────
-    1. External density modulation  → ``dns_solver._ext_rho_ch``
-    2. External viscosity scaling   → ``dns_solver._ext_nu_ch``
-    3. Korteweg body force (per axis) → ``dns_solver._ext_fx/fy/fz``
+    1. Density modulation   → ``dns_solver._ext_rho_ch``
+    2. Viscosity modulation → ``dns_solver._ext_nu_ch``
+    3. Korteweg body force  → ``dns_solver._ext_fx / _ext_fy / _ext_fz``
 
     All fields are stored as solver attributes that ``_compute_rhs()``
     blends in when present.
@@ -477,26 +480,43 @@ class CahnHilliardDNSBridge:
 
     which is computed by ``ch_solver``'s ``compute_chemical_potential``.
 
-    Usage::
+    Two usage patterns are supported:
+
+    Pattern A — explicit DNS solver (two-solver coupling)::
 
         bridge = CahnHilliardDNSBridge(ch_solver, dns_solver,
                                         korteweg_strength=1e-4)
         for step in range(n):
             u_new = ch_solver.step(u)
-            bridge.sync(u_new)          # push CH → DNS
+            bridge.sync(u_new)          # push CH → DNS buffers
             dns_solver.step()
+
+    Pattern B — standalone CH-only usage (no dns_solver)::
+
+        bridge = CahnHilliardDNSBridge(ch_solver,
+                                        korteweg_strength=0.1)
+        u_new, rho_eff, nu_eff, fx, fy, fz = bridge.coupled_step(u, sigma)
+
+    Args:
+        ch_solver          : a StructuralCahnHilliard3D (or subclass) instance.
+        dns_solver         : CompressibleSolver instance, or ``None`` for
+                             standalone usage via ``coupled_step()``.
+        rho_A, rho_B       : phase densities (A = u→+1, B = u→−1).
+        nu_A, nu_B         : phase kinematic viscosities.
+        korteweg_strength  : κ ≥ 0; set 0.0 to disable Korteweg forces.
     """
 
     def __init__(
         self,
         ch_solver,
-        dns_solver,
+        dns_solver=None,
         rho_A:             float = 1.0,
         rho_B:             float = 2.0,
         nu_A:              float = 1e-3,
         nu_B:              float = 1e-2,
         korteweg_strength: float = 0.0,
     ) -> None:
+        super().__init__()
         self.ch                = ch_solver
         self.dns               = dns_solver
         self.rho_A             = rho_A
@@ -505,47 +525,110 @@ class CahnHilliardDNSBridge:
         self.nu_B              = nu_B
         self.korteweg_strength = korteweg_strength
 
+    # ------------------------------------------------------------------
+    # Helpers (differentiable w.r.t. u)
+    # ------------------------------------------------------------------
+
+    def effective_density(self, u: torch.Tensor) -> torch.Tensor:
+        """ρ_eff(u) = ρ_B + (ρ_A − ρ_B) · φ(u),  φ = 0.5·(u+1)."""
+        phi = 0.5 * (u + 1.0)
+        return self.rho_B + (self.rho_A - self.rho_B) * phi
+
+    def effective_viscosity(self, u: torch.Tensor) -> torch.Tensor:
+        """ν_eff(u) = ν_B + (ν_A − ν_B) · φ(u),  φ = 0.5·(u+1)."""
+        phi = 0.5 * (u + 1.0)
+        return self.nu_B + (self.nu_A - self.nu_B) * phi
+
+    def korteweg_force(
+        self,
+        u:     torch.Tensor,
+        sigma: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Compute Korteweg capillary body force components.
+
+        Returns:
+            (fx, fy, fz) each of shape (Nx, Ny, Nz).
+            All zeros when ``korteweg_strength == 0``.
+        """
+        if self.korteweg_strength == 0.0:
+            z = torch.zeros_like(u)
+            return z, z, z
+        sigma   = self.ch._resolve_sigma(u, sigma)
+        mu_R    = self.ch.compute_chemical_potential(u, sigma)
+        rho_eff = self.effective_density(u)
+        dx      = self.ch.cfg.dx
+        k       = self.korteweg_strength
+        dmx = (torch.roll(mu_R, -1, 0) - torch.roll(mu_R, +1, 0)) / (2 * dx)
+        dmy = (torch.roll(mu_R, -1, 1) - torch.roll(mu_R, +1, 1)) / (2 * dx)
+        dmz = (torch.roll(mu_R, -1, 2) - torch.roll(mu_R, +1, 2)) / (2 * dx)
+        return -k * rho_eff * dmx, -k * rho_eff * dmy, -k * rho_eff * dmz
+
+    # ------------------------------------------------------------------
+    # Pattern A — push to DNS solver buffers
+    # ------------------------------------------------------------------
+
     def sync(
         self,
         u:     torch.Tensor,
         sigma: Optional[torch.Tensor] = None,
     ) -> None:
         """
-        Project CH state onto DNS solver buffers.
+        Project CH order parameter onto DNS solver buffers.
+
+        Requires ``dns_solver`` to have been supplied at construction.
 
         Args:
-            u     : (Nx, Ny, Nz) CH order parameter.
-            sigma : optional structural sigma field for chemical potential.
+            u     : (Nx, Ny, Nz) CH order parameter ∈ [−1, +1].
+            sigma : optional structural σ field for chemical potential.
 
         Writes to dns_solver:
-            _ext_rho_ch : (Nx, Ny, Nz) density modulation
-            _ext_nu_ch  : (Nx, Ny, Nz) viscosity modulation
+            _ext_rho_ch   : (Nx, Ny, Nz) effective density
+            _ext_nu_ch    : (Nx, Ny, Nz) effective kinematic viscosity
             _ext_fx/fy/fz : (Nx, Ny, Nz) Korteweg body force components
         """
+        if self.dns is None:
+            raise RuntimeError(
+                "CahnHilliardDNSBridge.sync() requires dns_solver; "
+                "pass dns_solver= at construction or use coupled_step()."
+            )
         dev = self.dns.device
         with torch.no_grad():
-            phi = 0.5 * (u + 1.0)
-            rho_eff = self.rho_B + (self.rho_A - self.rho_B) * phi
-            nu_eff  = self.nu_B  + (self.nu_A  - self.nu_B ) * phi
-
+            rho_eff = self.effective_density(u)
+            nu_eff  = self.effective_viscosity(u)
             self.dns._ext_rho_ch = rho_eff.to(dev)
             self.dns._ext_nu_ch  = nu_eff.to(dev)
+            fx, fy, fz = self.korteweg_force(u, sigma)
+            self.dns._ext_fx = fx.to(dev)
+            self.dns._ext_fy = fy.to(dev)
+            self.dns._ext_fz = fz.to(dev)
 
-            if self.korteweg_strength != 0.0:
-                mu_R = self.ch.compute_chemical_potential(u, sigma)
-                dx   = self.ch.cfg.dx
-                k    = self.korteweg_strength
-                dmx  = (torch.roll(mu_R,-1,0) - torch.roll(mu_R,+1,0)) / (2*dx)
-                dmy  = (torch.roll(mu_R,-1,1) - torch.roll(mu_R,+1,1)) / (2*dx)
-                dmz  = (torch.roll(mu_R,-1,2) - torch.roll(mu_R,+1,2)) / (2*dx)
-                self.dns._ext_fx = (-k * rho_eff * dmx).to(dev)
-                self.dns._ext_fy = (-k * rho_eff * dmy).to(dev)
-                self.dns._ext_fz = (-k * rho_eff * dmz).to(dev)
-            else:
-                zeros = torch.zeros_like(u).to(dev)
-                self.dns._ext_fx = zeros
-                self.dns._ext_fy = zeros
-                self.dns._ext_fz = zeros
+    # ------------------------------------------------------------------
+    # Pattern B — standalone coupled step (no dns_solver needed)
+    # ------------------------------------------------------------------
+
+    def coupled_step(
+        self,
+        u:     torch.Tensor,
+        sigma: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor,
+               torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Advance the CH solver one step and return all coupling fields.
+
+        Returns:
+            u_new   : (Nx, Ny, Nz) updated order parameter
+            rho_eff : (Nx, Ny, Nz) effective density
+            nu_eff  : (Nx, Ny, Nz) effective kinematic viscosity
+            fx      : (Nx, Ny, Nz) Korteweg force x-component
+            fy      : (Nx, Ny, Nz) Korteweg force y-component
+            fz      : (Nx, Ny, Nz) Korteweg force z-component
+        """
+        u_new   = self.ch.step(u, sigma)
+        rho_eff = self.effective_density(u_new)
+        nu_eff  = self.effective_viscosity(u_new)
+        fx, fy, fz = self.korteweg_force(u_new, sigma)
+        return u_new, rho_eff, nu_eff, fx, fy, fz
 
 
 # =============================================================================
