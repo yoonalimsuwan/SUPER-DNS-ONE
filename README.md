@@ -130,7 +130,7 @@ The main script is super_dns_one_v6.2.py.
 Taylor–Green vortex (default)
 
 ```bash
-python super_dns_one_v6.py --steps 200 --flux ausm
+python super_dns_one_v6.2.py --steps 200 --flux ausm
 ```
 
 Hypersonic boundary layer (Mach 20, 128³)
@@ -160,7 +160,7 @@ python super_dns_one_v6.2.py --denoise --denoise-method ssc
 Multi‑GPU distributed simulation (e.g., 4 GPUs, total grid 128³)
 
 ```bash
-torchrun --nproc_per_node=4 super_dns_one_v6.py --nx 128 --ny 128 --nz 128 --distributed --steps 500
+torchrun --nproc_per_node=4 super_dns_one_v6.2.py --nx 128 --ny 128 --nz 128 --distributed --steps 500
 ```
 
 For a full list of options, run:
