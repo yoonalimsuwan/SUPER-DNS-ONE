@@ -36,9 +36,9 @@ All six modules are:
 SUPER DNS ONE/
 ├── one_core_v3.py                  # Shared foundation (import first)
 ├── structural_langevin_v3.py       # Molecular-scale Langevin MD
-├── structuralfluctuatinghydro_v6.py # Continuum Fluctuating Hydrodynamics
+├── structuralfluctuatinghydro_v6.2.py # Continuum Fluctuating Hydrodynamics
 ├── structural_cahn_hilliard_3d.py  # Phase-field & interface dynamics
-├── super_dns_one_v6.py             # Compressible DNS / LES solver
+├── super_dns_one_v6.2.py             # Compressible DNS / LES solver
 └── structural_fno_3d.py            # AI surrogate (Fourier Neural Operator)
 ```
 
@@ -168,7 +168,7 @@ Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
 
 ---
 
-### 3. `structuralfluctuatinghydro_v6.py` — Structural Fluctuating Hydrodynamics  `v6.1`
+### 3. `structuralfluctuatinghydro_v6.2.py` — Structural Fluctuating Hydrodynamics  `v6.1`
 
 **Role:** Continuum Fluctuating Hydrodynamics (FH) solver at the mesoscale.
 
@@ -216,7 +216,7 @@ Velocity uz      : z-face centres (Nx,   Ny,   Nz+1)
 #### Usage
 
 ```python
-from structuralfluctuatinghydro_v6 import StructuralFluctuatingHydro, SolverConfig
+from structuralfluctuatinghydro_v6.2 import StructuralFluctuatingHydro, SolverConfig
 
 cfg = SolverConfig(
     Nx=64, Ny=64, Nz=64,
@@ -354,7 +354,7 @@ Claude (Anthropic) · Gemini (Google) · GPT (OpenAI) · DeepSeek
 
 ---
 
-### 5. `super_dns_one_v6.py` — SUPER DNS ONE  `v6.1`
+### 5. `super_dns_one_v6.2.py` — SUPER DNS ONE  `v6.1`
 
 **Role:** 3-D compressible Direct Numerical Simulation / Large-Eddy Simulation solver at the continuum scale.
 
@@ -420,7 +420,7 @@ bridge.sync(coords)
 #### Usage
 
 ```python
-from super_dns_one_v6 import CompressibleSolver, CFDConfig
+from super_dns_one_v6.2 import CompressibleSolver, CFDConfig
 import numpy as np
 
 nx, ny, nz = 128, 64, 64
@@ -579,9 +579,9 @@ The full coupling graph between all six modules:
         │ imports           │ imports           │ imports
         ▼                   ▼                   ▼
 ┌──────────────┐   ┌──────────────────┐   ┌─────────────────────────────┐
-│  Structural  │   │   Structural     │   │    SUPER DNS ONE v6.1       │
+│  Structural  │   │   Structural     │   │    SUPER DNS ONE v6.2       │
 │  Langevin    │   │   Fluctuating    │   │    (CompressibleSolver)     │
-│  v3.1        │   │   Hydro v6.1     │   │    Riemann: AUSM+, HLLC    │
+│  v3.1        │   │   Hydro v6.2     │   │    Riemann: AUSM+, HLLC    │
 │  (BAOAB MD)  │   │   (LLNS FH)      │   │    Advection: WENO-5, TVD  │
 └──────┬───────┘   └────────┬─────────┘   └──────────────┬──────────────┘
        │                    │                              │
@@ -621,7 +621,7 @@ scipy
 matplotlib
 ```
 
-Optional (for full `super_dns_one_v6.py` features):
+Optional (for full `super_dns_one_v6.2.py` features):
 
 ```
 optuna          # Bayesian hyperparameter optimisation
@@ -656,9 +656,9 @@ Each module includes a built-in verification suite. Run any file directly:
 ```bash
 python one_core_v3.py
 python structural_langevin_v3.py
-python structuralfluctuatinghydro_v6.py
+python structuralfluctuatinghydro_v6.2.py
 python structural_cahn_hilliard_3d.py
-python super_dns_one_v6.py
+python super_dns_one_v6.2.py
 python structural_fno_3d.py
 ```
 
@@ -671,7 +671,7 @@ import torch
 from structural_cahn_hilliard_3d import (
     CahnHilliardConfig, StructuralCahnHilliard3D, make_sigma_field
 )
-from super_dns_one_v6 import CompressibleSolver, CFDConfig
+from super_dns_one_v6.2 import CompressibleSolver, CFDConfig
 from one_core import CahnHilliardDNSBridge
 import numpy as np
 
