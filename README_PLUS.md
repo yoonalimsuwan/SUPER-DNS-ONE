@@ -39,7 +39,7 @@ SUPER DNS ONE/
 ├── structuralfluctuatinghydro_v6_3.py # Continuum Fluctuating Hydrodynamics
 ├── structural_cahn_hilliard_3d_v3.py  # Phase-field & interface dynamics
 ├── super_dns_one_v6_3.py             # Compressible DNS / LES solver
-└── structural_fno_3d.py            # AI surrogate (Fourier Neural Operator)
+└── structural_fno_3d_v2_1.py            # AI surrogate (Fourier Neural Operator)
 ```
 
 ---
@@ -448,7 +448,7 @@ Claude (Anthropic) · GPT (OpenAI) · Gemini (Google) · DeepSeek
 
 ---
 
-### 6. `structural_fno_3d.py` — Structural FNO 3D  `v2.0.0`
+### 6. `structural_fno_3d_v2_1.py` — Structural FNO 3D  `v2.0.0`
 
 **Role:** AI surrogate model trained on SUPER DNS ONE cluster output.
 
@@ -522,7 +522,7 @@ Output (B, 1, Nx, Ny, Nz) × 2        mean, log_var
 #### Usage
 
 ```python
-from structural_fno_3d import (
+from structural_fno_3d_v2_1 import (
     StructuralFNO3D, TrainerConfig,
     StructuralFNOTrainer, SuperDNSDataset, PhysicsLoss,
 )
@@ -602,7 +602,7 @@ The full coupling graph between all six modules:
                                    │
                                    ▼
                  ┌─────────────────────────────────────┐
-                 │       Structural FNO 3D v2.0         │
+                 │       Structural FNO 3D v2.1         │
                  │  StructuralFNO3D · PhysicsLoss       │
                  │  SuperDNSDataset · StructuralFNOTrainer │
                  └─────────────────────────────────────┘
@@ -659,7 +659,7 @@ python structural_langevin_v3.py
 python structuralfluctuatinghydro_v6_3.py
 python structural_cahn_hilliard_3d_v3.py
 python super_dns_one_v6_3.py
-python structural_fno_3d.py
+python structural_fno_3d_v2_1.py
 ```
 
 All verification suites print `[PASS]` / `[FAIL]` for each test case and exit with code `0` on success.
@@ -701,7 +701,7 @@ for step in range(1000):
 ### Train FNO surrogate on DNS snapshots
 
 ```python
-from structural_fno_3d import (
+from structural_fno_3d_v2_1 import (
     StructuralFNO3D, TrainerConfig, StructuralFNOTrainer, SuperDNSDataset
 )
 
@@ -740,7 +740,7 @@ The entire cluster is grounded in a four-paper series on **Structural Calculus**
 | `structuralfluctuatinghydro_v6.py` | 6.1 | CH↔FH bridge + full differentiability (9 fixes) |
 | `structural_cahn_hilliard_3d.py` | v2 | GPU Conv3d/FFT Laplacian, ThinFilm, PFC, CH↔DNS bridge |
 | `super_dns_one_v6.py` | 6.1 | CH↔DNS bridge + full differentiability (8 fixes) |
-| `structural_fno_3d.py` | 2.0.0 | MultiScale FFT, FiLM, CrossAttention, MC-Dropout, PhysicsLoss |
+| `structural_fno_3d_v2_1.py` | 2.1.0 | MultiScale FFT, FiLM, CrossAttention, MC-Dropout, PhysicsLoss |
 
 ---
 
