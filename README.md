@@ -125,36 +125,36 @@ pip install PyWavelets          # --nxnted denoising
 
 Quick Start
 
-The main script is super_dns_one_v6.2.py.
+The main script is super_dns_one_v6_3.py.
 
 Taylor–Green vortex (default)
 
 ```bash
-python super_dns_one_v6.2.py --steps 200 --flux ausm
+python super_dns_one_v6_3.py --steps 200 --flux ausm
 ```
 
 Hypersonic boundary layer (Mach 20, 128³)
 
 ```bash
-python super_dns_one_v6.2.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
+python super_dns_one_v6_3.py --case hypersonic_bnd --Mach 20.0 --nx 128 --ny 128 --nz 128 --Re 1e6 --steps 500
 ```
 
 Train SOC parameters to match a target kinetic energy
 
 ```bash
-python super_dns_one_v6.2.py --train-soc --target-energy 0.5
+python super_dns_one_v6_3.py --train-soc --target-energy 0.5
 ```
 
 Grid convergence test
 
 ```bash
-python super_dns_one_v6.2.py --grid-convergence
+python super_dns_one_v6_3.py --grid-convergence
 ```
 
 Denoise a velocity field with SSC
 
 ```bash
-python super_dns_one_v6.2.py --denoise --denoise-method ssc
+python super_dns_one_v6_3.py --denoise --denoise-method ssc
 ```
 
 Multi‑GPU distributed simulation (e.g., 4 GPUs, total grid 128³)
@@ -166,7 +166,7 @@ torchrun --nproc_per_node=4 super_dns_one_v6.2.py --nx 128 --ny 128 --nz 128 --d
 For a full list of options, run:
 
 ```bash
-python super_dns_one_v6.2.py --help
+python super_dns_one_v6_3.py --help
 ```
 ---
 
