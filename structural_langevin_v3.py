@@ -47,6 +47,11 @@ from one_core import (
     ONE_VERSION,
 )
 
+# Shared, memory-safe soft-interface scoring (fixes the O(N^2) memory
+# blow-up of the original dense pairwise-distance implementation; see
+# structural_interface_utils.py for the full rationale and self-tests).
+from structural_interface_utils import soft_interface_score
+
 
 # ---------------------------------------------------------------------------
 # Helper: soft interface mask (differentiable w.r.t. coords)
@@ -64,15 +69,37 @@ class InterfaceDetector(InterfaceDetectorBase):  # subclasses ONE Core base
         returns : (N,)    — scalar interface score per atom ∈ [0, 1]
     """
 
-    def __init__(self, r_cut: float = 8.0, sharpness: float = 4.0):
+    def __init__(
+        self,
+        r_cut: float = 8.0,
+        sharpness: float = 4.0,
+        mode: str = "auto",
+        chunk_size: int = 2048,
+    ):
         """
         Args:
             r_cut      : cutoff distance (Å) for neighbourhood definition.
             sharpness  : steepness of the sigmoid used for soft thresholding.
+            mode       : "auto" (default), "dense", or "chunked". "auto"
+                         uses the dense O(N^2) computation for small N
+                         (bit-identical to every prior release) and the
+                         memory-safe chunked computation (exact, same
+                         formula) once N grows large enough that the old
+                         dense (N, N, 3) tensor would risk an
+                         out-of-memory crash. See structural_interface_
+                         utils.py for details and for the accelerated,
+                         approximate "cell_list" mode (opt-in only, not
+                         reachable from here — construct it directly via
+                         structural_interface_utils.cell_list_soft_interface_score
+                         if you specifically need O(N) scaling and have
+                         verified it suits your system's density).
+            chunk_size : query-atom block size used by the chunked path.
         """
         super().__init__()
         self.r_cut = r_cut
         self.sharpness = sharpness
+        self.mode = mode
+        self.chunk_size = chunk_size
 
     def forward(self, coords: torch.Tensor) -> torch.Tensor:
         """
@@ -84,32 +111,18 @@ class InterfaceDetector(InterfaceDetectorBase):  # subclasses ONE Core base
         if coords.dim() != 2 or coords.shape[1] != 3:
             raise ValueError(f"coords must be (N, 3), got {tuple(coords.shape)}")
 
-        # Pairwise squared distances — (N, N)
-        diff = coords.unsqueeze(0) - coords.unsqueeze(1)          # (N, N, 3)
-        dist2 = (diff ** 2).sum(dim=-1)                            # (N, N)
-        dist = torch.sqrt(dist2 + 1e-8)                            # (N, N) stable
-
-        # Soft neighbour weight: w_ij → 1 when dist < r_cut, → 0 outside
-        w = torch.sigmoid(self.sharpness * (self.r_cut - dist))    # (N, N)
-
-        # Zero out self-interaction on the diagonal
-        mask_self = 1.0 - torch.eye(coords.shape[0], device=coords.device,
-                                    dtype=coords.dtype)
-        w = w * mask_self                                           # (N, N)
-
-        # Weighted mean distance per atom
-        w_sum = w.sum(dim=-1).clamp(min=1e-8)                      # (N,)
-        mean_d = (w * dist).sum(dim=-1) / w_sum                    # (N,)
-
-        # Weighted variance of distance — high variance ↔ interface-like env
-        mean_d2 = (w * dist ** 2).sum(dim=-1) / w_sum              # (N,)
-        var_d = (mean_d2 - mean_d ** 2).clamp(min=0.0)             # (N,)
-        std_d = torch.sqrt(var_d + 1e-8)                           # (N,)
-
-        # Normalise std to [0,1] via sigmoid (interface score)
-        interface_score = torch.sigmoid(self.sharpness * (std_d - mean_d * 0.3))
-
-        return interface_score   # (N,)
+        # Fix (Claude, Anthropic): the original implementation built a
+        # dense (N, N, 3) pairwise-displacement tensor unconditionally,
+        # which is O(N^2) in memory and crashes for realistic system
+        # sizes (e.g. ~10 GB just for `diff` at N=50,000). This call is
+        # numerically IDENTICAL to the original formula for small N and
+        # switches to a memory-safe, still-exact chunked computation once
+        # N is large — see structural_interface_utils.py for the full
+        # derivation and a self-test proving exactness.
+        return soft_interface_score(
+            coords, self.r_cut, self.sharpness,
+            mode=self.mode, chunk_size=self.chunk_size,
+        )
 
 
 # SemanticStateContraction is imported from one_core — not redefined here.
