@@ -22,6 +22,8 @@
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21186468-blue)](https://doi.org/10.5281/zenodo.21186468)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21203483-blue)](https://doi.org/10.5281/zenodo.21203483)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21203706-blue)](https://doi.org/10.5281/zenodo.21203706)
+[![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21206525-blue)](https://doi.org/10.5281/zenodo.21206525)
+
 
 SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume solver for the compressible Navier–Stokes equations. It is designed for **high‑fidelity civilian research**:
 
