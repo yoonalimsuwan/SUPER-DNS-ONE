@@ -1,6 +1,11 @@
 """
 Validation / smoke tests for seismic_one.py
 
+Developer      : Yoon A Limsuwan , PAI / MSPS NETWORK
+# License        : MIT
+# Year           : 2026
+
+
 Checks:
   1. GroundMotionEngine: synthetic motion generation, PGA/PGV sanity, response spectrum shape
   2. SiteResponseLayer: soft soil over rock amplifies motion at expected frequency range;
