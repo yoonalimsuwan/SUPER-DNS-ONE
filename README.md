@@ -270,7 +270,7 @@ Citing
 If you use SUPER DNS ONE in your research, please cite:
 
 ```
-Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation for Peaceful Applications."
+PAI , Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation for Peaceful Applications."
 Zenodo, 2026.
 https://doi.org/10.5281/zenodo.21198822
 ```
@@ -278,7 +278,7 @@ https://doi.org/10.5281/zenodo.21198822
 Or cite the GitHub repository:
 
 ```
-Yoon A Limsuwan. (2026). SUPER DNS ONE (Version 6.3.0) [Computer software].
+PAI , Yoon A Limsuwan. (2026). SUPER DNS ONE (Version 6.3.0) [Computer software].
 https://github.com/yoonalimsuwan/SUPER-DNS-ONE
 ```
 
