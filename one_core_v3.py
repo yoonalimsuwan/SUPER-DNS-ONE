@@ -1,7 +1,7 @@
 # =============================================================================
 # ONE CORE — Shared Foundation of the ONE Ecosystem
 # =============================================================================
-# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Developer : Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 # Year      : 2026
 # ORCID     : 0009-0008-2374-0788
@@ -28,6 +28,7 @@
 #   LangevinDNSBridge       — Langevin structural stress → DNS solver
 #   CahnHilliardFHBridge    — CH phase-field density/viscosity → FH solver
 #   CahnHilliardDNSBridge   — CH phase-field + Korteweg forces → DNS solver
+#   SeismicDNSBridge        — ground-motion pseudo body force → DNS solver
 #
 # Rule: if a class appears in more than one solver file, it lives here and
 # is imported from here.  Individual solver files must NOT redefine these
@@ -49,6 +50,15 @@
 #   3.1.0  — CahnHilliard↔FH, CahnHilliard↔DNS bridges;
 #             structural_biharmonic_n promoted to one_core;
 #             full 5-solver interoperability
+#   3.2.0  — SeismicDNSBridge added (ground-motion pseudo body force →
+#             DNS solver, for tank sloshing / shaking-foundation fluid
+#             problems); duck-typed source (no new hard dependency).
+#             Companion fix (super_dns_one_v6_3.py, Bug 11): _ext_nu_ch
+#             was written by CahnHilliardDNSBridge.sync() but never read
+#             in CompressibleSolver._compute_rhs -- the viscosity
+#             contrast between CH phases had silently had zero effect in
+#             every prior coupled run. Fixed on the solver side; see that
+#             file's v6.3→v6.4 changelog entry.
 #
 # =============================================================================
 
@@ -64,7 +74,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-ONE_VERSION: str = "3.1.0"
+ONE_VERSION: str = "3.2.0"
 
 
 # =============================================================================
@@ -629,6 +639,127 @@ class CahnHilliardDNSBridge(nn.Module):
         nu_eff  = self.effective_viscosity(u_new)
         fx, fy, fz = self.korteweg_force(u_new, sigma)
         return u_new, rho_eff, nu_eff, fx, fy, fz
+
+
+# =============================================================================
+# 5d. Seismic-DNS Bridge Protocol  (ONE Core v3.2)
+# =============================================================================
+
+class SeismicDNSBridge:
+    """
+    Bridge: injects ground-motion pseudo body force into the DNS/LES
+    compressible solver, for non-inertial-frame problems -- tank
+    sloshing, equipment/piping on a shaking foundation, liquid storage
+    on a structure subjected to earthquake shaking, etc.
+
+    Physics
+    ───────
+    In the reference frame of a rigidly-shaking structure, the fluid
+    momentum equation gains a uniform pseudo body force equal in
+    magnitude and opposite in sign to the structure's absolute ground
+    acceleration a_ground(t):
+
+        f_volumetric(x,t) = −ρ(x,t) · a_ground(t)      [N/m^3]
+
+    which is exactly the quantity dns_solver._compute_rhs adds directly
+    into rhs_rhou/rhs_rhov/rhs_rhow (and, automatically, f·u into
+    rhs_rhoE) -- see "Cahn-Hilliard Korteweg body force injection" in
+    super_dns_one_v6_3.py, which reads _ext_fx/_ext_fy/_ext_fz built
+    exactly this way. This bridge writes those same buffers, following
+    the same "written by <Bridge>.sync(), zero-cost if not connected"
+    convention as CahnHilliardDNSBridge above.
+
+    Source coupling is duck-typed, NOT a hard dependency on any
+    particular seismic-analysis module: accel_x/accel_y/accel_z are each
+    either ``None``, a constant float [m/s^2], or any object exposing
+    ``.at(t) -> float`` returning the absolute ground acceleration at
+    time t [s] (e.g. a ``seismic_dns_coupling_one.CFDTimeSeriesBC``
+    wrapping a SEISMIC ONE ``GroundMotion``). This keeps one_core's only
+    hard dependency as torch, matching every other bridge in this file.
+
+    IMPORTANT — sign convention: accel_x/y/z must supply the RAW
+    absolute ground acceleration a_ground(t), not a pre-negated pseudo-
+    force. This bridge applies the −ρ·a sign internally. (If wrapping
+    seismic_dns_coupling_one.TankSloshingCoupling, use its raw motion's
+    acceleration series, e.g. ``CFDTimeSeriesBC(motion.time, motion.accel,
+    ...)`` -- NOT ``body_force_series()``, which already applies the
+    negative sign for standalone use outside this bridge and would
+    double the sign flip if passed here.)
+
+    Usage::
+
+        bridge = SeismicDNSBridge(dns_solver, accel_x=ax_series, accel_z=az_series)
+        for step in range(n_steps):
+            bridge.sync()          # writes dns_solver._ext_fx/_ext_fy/_ext_fz
+            dns_solver.step()
+
+    Notes
+    ─────
+    - dns_solver.time is only advanced by CompressibleSolver.step() AFTER
+      all 3 TVD-RK3 substages complete (one dt for the whole step), so
+      sync() should be called once per outer step, BEFORE step() -- the
+      time used is the value at the START of that step, held constant
+      across the 3 internal RK stages (matching how _ext_fx is checked
+      fresh in every _compute_rhs call within a step but only written
+      once per sync()).
+    - Overwrite semantics (not accumulate), matching
+      CahnHilliardDNSBridge.sync(): each call replaces
+      _ext_fx/_ext_fy/_ext_fz entirely. There is currently no gravity
+      term anywhere in super_dns_one_v6_3.py's _compute_rhs, so if a
+      simulation needs both hydrostatic gravity and seismic forcing (or
+      both this bridge and a simultaneously-active Korteweg force from
+      CahnHilliardDNSBridge), combine the contributions externally
+      before/after calling sync() rather than expecting automatic
+      superposition across bridges.
+    """
+
+    def __init__(self, dns_solver, accel_x=None, accel_y=None, accel_z=None) -> None:
+        self.dns = dns_solver
+        self.accel_x = accel_x
+        self.accel_y = accel_y
+        self.accel_z = accel_z
+
+    @staticmethod
+    def _eval(source, t: float) -> float:
+        if source is None:
+            return 0.0
+        if isinstance(source, (int, float)):
+            return float(source)
+        at = getattr(source, "at", None)
+        if callable(at):
+            return float(at(t))
+        raise TypeError(
+            "accel_x/accel_y/accel_z must each be None, a number, or an "
+            "object exposing .at(t) -> float (got "
+            f"{type(source).__name__})."
+        )
+
+    def sync(self) -> None:
+        """
+        Call once per outer step, BEFORE dns_solver.step(). Reads
+        dns_solver.time and dns_solver.rho; overwrites
+        dns_solver._ext_fx/_ext_fy/_ext_fz in place with the correctly
+        density-scaled volumetric seismic pseudo-force.
+        """
+        if self.dns.rho is None:
+            raise RuntimeError(
+                "dns_solver.rho is None -- call dns_solver.initialize(...) "
+                "before the first SeismicDNSBridge.sync() call."
+            )
+        t   = float(self.dns.time)
+        rho = self.dns.rho
+        dev = self.dns.device
+
+        with torch.no_grad():
+            if self.accel_x is not None:
+                ax = self._eval(self.accel_x, t)
+                self.dns._ext_fx = (-rho * ax).to(dev)
+            if self.accel_y is not None:
+                ay = self._eval(self.accel_y, t)
+                self.dns._ext_fy = (-rho * ay).to(dev)
+            if self.accel_z is not None:
+                az = self._eval(self.accel_z, t)
+                self.dns._ext_fz = (-rho * az).to(dev)
 
 
 # =============================================================================
