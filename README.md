@@ -292,7 +292,7 @@ This project is licensed under the MIT License – see the LICENSE file for deta
 
 Contact
 
-Yoon A Limsuwan – GitHub
+PAI , Yoon A Limsuwan – GitHub
 Project repository: https://github.com/yoonalimsuwan/SUPER-DNS-ONE
 
 ```
