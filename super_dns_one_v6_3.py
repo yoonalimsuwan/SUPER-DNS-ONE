@@ -1,7 +1,7 @@
 # =============================================================================
 # SUPER DNS ONE v6 — Native Full-Differentiable 3D Compressible DNS / LES
 # =============================================================================
-# Author : Yoon A Limsuwan / MSPS NETWORK
+# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
