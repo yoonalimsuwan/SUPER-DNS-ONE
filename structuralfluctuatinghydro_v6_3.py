@@ -1,7 +1,7 @@
 # =============================================================================
 # STRUCTURAL LANGEVIN FOR FLUCTUATING HYDRODYNAMICS (CFD BRIDGE)
 # =============================================================================
-# Developer : Yoon A Limsuwan / MSPS NETWORK
+# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 # Version   : 6.3 (boundary-face density fix for non-uniform-density flows)
 # Year      : 2026
