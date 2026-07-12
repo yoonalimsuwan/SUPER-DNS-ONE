@@ -99,7 +99,7 @@ For grids larger than 200³, the solver supports **multi‑GPU distributed memor
 - Taylor–Green vortex test (kinetic energy decay)
 - Kolmogorov spectral analysis (inertial range slope)
 - Grid convergence test (Richardson extrapolation)
-- Batalin–Vilkovisky (BV) consistency monitors (energy, divergence, stress balance)
+  
 
 ### Hardware & Parallelism
 - Multi‑backend: CPU, CUDA, MPS, Ascend NPU
