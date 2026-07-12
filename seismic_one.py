@@ -2,6 +2,10 @@
 SEISMIC ONE — Earthquake Engineering Module for the ONE Ecosystem
 ====================================================================
 
+Developer      : PAI , Yoon A Limsuwan / MSPS NETWORK
+# License        : MIT
+# Year           : 2026
+
 Production-grade seismic analysis module covering:
     1. GroundMotionEngine     — ground motion I/O, PGA/PGV/PGD, response spectra
     2. SiteResponseLayer      — 1D equivalent-linear site response (SHAKE-style)
