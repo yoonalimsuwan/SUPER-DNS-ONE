@@ -10,11 +10,6 @@ Production-grade seismic analysis module covering:
     5. SeismicOne             — orchestrator: bedrock motion -> site response
                                   -> structural response -> damage/liquefaction
 
-Developer      : Yoon A Limsuwan , PAI / MSPS NETWORK
-# License        : MIT
-# Year           : 2026
-
-
 Scope & honesty note
 ---------------------
 This module is *structural/geotechnical* seismic engineering (elastodynamics,
