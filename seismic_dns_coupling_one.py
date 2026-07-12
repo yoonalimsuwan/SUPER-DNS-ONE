@@ -1,6 +1,9 @@
 """
 SEISMIC-DNS COUPLING ONE — Interface between SEISMIC ONE and SUPER DNS ONE
 ============================================================================
+Developer      : PAI , Yoon A Limsuwan / MSPS NETWORK
+# License        : MIT
+# Year           : 2026
 
 Couples earthquake engineering outputs (seismic_one.py) to fluid-dynamics
 boundary/initial conditions consumable by a compressible CFD/DNS solver
