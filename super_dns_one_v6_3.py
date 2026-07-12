@@ -1,7 +1,7 @@
 # =============================================================================
 # SUPER DNS ONE v6 — Native Full-Differentiable 3D Compressible DNS / LES
 # =============================================================================
-# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Author : Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
@@ -21,6 +21,21 @@
 #   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
+#
+# Changes v6.3 → v6.4:
+#   Bug 11 fix: self._ext_nu_ch (viscosity-modulation coupling buffer,
+#     written by CahnHilliardDNSBridge.sync() in one_core_v3.py) was
+#     declared in __init__ but never read in _compute_rhs -- only
+#     _ext_rho_ch and _ext_fx/fy/fz were consumed. Confirmed by reading
+#     both source files: the bridge writes _ext_nu_ch every sync() call,
+#     but mu_lam was computed purely from nu_phys (=1/Re) and Sutherland's
+#     law, with no path for _ext_nu_ch to reach it. Effect: in every
+#     existing two-phase CahnHilliardDNSBridge-coupled run, the density
+#     contrast between phases took effect but the viscosity contrast did
+#     not -- both phases silently shared the solver's single global
+#     nu_phys. Fixed by adding `mu_lam = mu_lam + rho * self._ext_nu_ch`
+#     right after mu_lam is computed, guarded by the same
+#     "zero-cost if not connected" pattern used for _ext_fx/_ext_rho_ch.
 #
 # Changes v6.2 → v6.3:
 #   Bug 6 fix: SOCController.nu_t used an additive epsilon floor on
@@ -2023,6 +2038,21 @@ class CompressibleSolver:
             mu_lam = self.nu_phys * rho * T.pow(1.5) * (1+S) / (T+S+1e-12)
         else:
             mu_lam = self.nu_phys * rho
+
+        # Bug 11 fix (v6.4): self._ext_nu_ch was declared in __init__
+        # ("External Cahn-Hilliard coupling buffers") and written by
+        # CahnHilliardDNSBridge.sync() in one_core_v3.py (dns_solver.
+        # _ext_nu_ch = nu_eff), but was never read anywhere in this
+        # method -- only _ext_rho_ch and _ext_fx/fy/fz were actually
+        # consumed. This meant the viscosity contrast between CH phases
+        # (e.g. water/air, water/oil, liquefied-soil/water) had zero
+        # effect on any coupled run; only the density contrast took
+        # effect. _ext_nu_ch is a kinematic-viscosity-like modulation
+        # (same units/role as nu_phys), so it enters mu_lam the same way
+        # nu_phys does: multiplied by local rho. Zero-cost when not
+        # connected, matching the _ext_fx/_ext_rho_ch guard pattern.
+        if self._ext_nu_ch.abs().max() > 1e-30:
+            mu_lam = mu_lam + rho * self._ext_nu_ch
 
         rho_p  = self._pad_field(rho);   u_p  = self._pad_field(u)
         v_p    = self._pad_field(v);     w_p  = self._pad_field(w)
