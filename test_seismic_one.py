@@ -1,7 +1,7 @@
 """
 Validation / smoke tests for seismic_one.py
 
-Developer      : Yoon A Limsuwan , PAI / MSPS NETWORK
+Developer      : PAI , Yoon A Limsuwan / MSPS NETWORK
 # License        : MIT
 # Year           : 2026
 
