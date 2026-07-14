@@ -1,7 +1,7 @@
 # =============================================================================
 # SUPER DNS ONE v6 — Native Full-Differentiable 3D Compressible DNS / LES
 # =============================================================================
-# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Author : Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
@@ -21,6 +21,83 @@
 #   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
+#
+# Changes v6.7 → v6.8:
+#   Genuine mass source into the continuity equation (requested: full
+#   DNS-grid pyrolysis coupling). New _ext_mdot buffer family:
+#   _ext_mdot [kg/(m^3.s), mass], _ext_mdot_u/v/w [momentum carried by
+#   injected mass], _ext_mdot_e [energy carried], _ext_mdot_Z
+#   [mixture-fraction carried] -- all consumed together in _compute_rhs,
+#   the ONLY place in this file rhs_rho gets a source term at all
+#   (continuity was exactly closed, convective-terms-only, before this).
+#   Written by the new one_core_v3.PyrolysisDNSBridge (v3.4.0+).
+#
+#   UNIT-CONSISTENCY BUG caught and fixed before shipping: the mass-
+#   source consumption block initially added the buffers directly into
+#   this solver's non-dimensional RHS with NO scale conversion at all --
+#   the same class of bug already found once for combustion/radiation
+#   (v6.6's T_ref/combustion_nondim_scale fix), just not yet applied
+#   here. Fixed with a NEW, SEPARATE cfg.mdot_nondim_scale (default 1.0,
+#   explicit must-set-yourself, same philosophy as
+#   combustion_nondim_scale) -- deliberately NOT reusing
+#   combustion_nondim_scale, since mass-rate and energy-rate source terms
+#   belong to different dimensional groups (mass ~ L_ref/(rho_ref*U_ref);
+#   energy ~ L_ref/(rho_ref*U_ref^3)) and would need different conversion
+#   factors even in a correctly-derived non-dimensionalization.
+#
+#   RS(soot)/RZ(mixture fraction) clamping in step() (Z,Y_soot in [0,1])
+#   is unaffected by mass injection changing rho_n's growth rate -- the
+#   existing `torch.minimum(RZ_n, rho_n)` / `torch.minimum(RS_n, rho_n)`
+#   clamps already reference the POST-injection rho_n, so they remain
+#   correct without further changes.
+#
+# Changes v6.6 → v6.7:
+#   Discrete-ordinates radiation (DOM) + soot transport -- BOTH DEFAULT
+#   DISABLED (opt-in only, explicitly requested to be "built but gated
+#   off for certainty" given the real risk class already shown once by
+#   the v6.6 non-dimensional unit bug). Every new code path is validated
+#   in isolation (numpy prototypes) but NOT tested end-to-end against
+#   real hardware/GPU in this session -- treat as a further step toward
+#   FDS's modeling category, still requiring your own validation before
+#   trusting quantitative results, same caveat as v6.6's combustion/
+#   radiation additions.
+#
+#     - cfg.radiation_method: "P1" (default, unchanged v6.6 behaviour) or
+#       "DOM" (new). DOM solves the discrete-ordinates RTE via SOURCE
+#       ITERATION (fixed-point/Jacobi iteration on the upwind-discretized
+#       equation along each quadrature direction) rather than a literal
+#       sequential sweep -- sweeps don't vectorize on tensor hardware
+#       (each cell needs an already-updated upwind neighbor within the
+#       same pass); source iteration is a real, standard method for the
+#       same equation set that DOES vectorize, at the cost of needing
+#       cfg.dom_n_iterations (default 20) to converge. Quadrature is a
+#       product Gauss-Legendre(polar) x uniform(azimuthal) set
+#       (cfg.dom_n_polar x cfg.dom_n_azimuthal, default 4x8=32
+#       directions) -- verified (numpy prototype) to integrate to exactly
+#       4*pi total solid angle and to reproduce the correct isotropic
+#       blackbody equilibrium G=4*sigma*T^4 for a uniform-temperature
+#       test case. Same periodic-boundary assumption as the P1 path (no
+#       wall emissivity/reflection BC modeled) -- not rigorously valid
+#       for a wall-dominated enclosure.
+#     - cfg.enable_soot: new conserved scalar RS=rho*Y_soot, transported
+#       via the same centered-difference scheme as RZ (mixture fraction),
+#       through the full TVD-RK3 integration. Production/oxidation source
+#       only active when BOTH enable_soot AND enable_combustion are True
+#       (double-gated: soot kinetics need the resolved Y_fuel/Y_O2/T
+#       state that only exists under combustion) -- ports the exact same
+#       semi-empirical rate laws as fire_one.SootKinetics (validated
+#       independently there: formation gated to fuel-rich Z, oxidation
+#       requires both soot and local O2 present).
+#     - RS added to save_checkpoint/load_checkpoint, same backward-
+#       compatible pattern as RZ (pre-v6.7 checkpoints load with
+#       Y_soot=0, warn if enable_soot=True).
+#     - Still NOT implemented: finite-rate/PAH soot chemistry (this
+#       remains a semi-empirical rate closure, not real kinetics), wall
+#       emissivity/reflection boundary conditions for either radiation
+#       method, and live 3D-grid coupling of PyrolysisModel (still a
+#       standalone fire_one.py physics model, not wired as a DNS boundary
+#       condition -- that needs a new mass-source-into-continuity
+#       mechanism, a further integration step beyond this pass).
 #
 # Changes v6.5 → v6.6:
 #   FIRE CFD upgrade (requested: "make it real NIST-FDS-style fire CFD",
@@ -1744,6 +1821,66 @@ class CompressibleSolver:
         # transported as conserved densities elsewhere in this class).
         self.RZ = _zeros.clone()
 
+        # ── v6.7: soot transport + discrete-ordinates radiation ─────────────
+        # BOTH DEFAULT DISABLED ("built but gated off for now, for
+        # certainty" per explicit request -- validated in isolation, but
+        # gated behind config flags until explicitly enabled, given the
+        # real risk class already demonstrated once by the v6.6
+        # non-dimensional unit bug). Double-gated where relevant so an
+        # accidental single flag flip can't silently activate a new,
+        # less-tested code path.
+        self.enable_soot           = bool(getattr(cfg, "enable_soot", False))
+        self.soot_A_formation      = float(getattr(cfg, "soot_A_formation", 100.0))
+        self.soot_Ea_formation     = float(getattr(cfg, "soot_Ea_formation", 1.25e5))
+        self.soot_A_oxidation      = float(getattr(cfg, "soot_A_oxidation", 1.0e4))
+        self.soot_Ea_oxidation     = float(getattr(cfg, "soot_Ea_oxidation", 1.65e5))
+        self.soot_schmidt          = float(getattr(cfg, "soot_schmidt", 0.7))
+        # rho*Y_soot, conserved form (parallels RZ). Zero-initialized;
+        # inert (transports but never produced/destroyed) unless BOTH
+        # enable_soot AND enable_combustion are True (soot kinetics need
+        # the local Y_fuel/Y_O2/T state that only exists under combustion).
+        self.RS = _zeros.clone()
+
+        # ── v6.8: external mass-source buffers (continuity + carried
+        # momentum/energy/mixture-fraction) ─────────────────────────────────
+        # Requested addition: pyrolysis (or any real mass-injection
+        # process -- fuel gasification, water-mist evaporation, etc.)
+        # adds mass to the gas phase, which NO existing buffer could
+        # represent -- rho was, until now, exactly conserved by the
+        # convective terms alone (a true closed continuity equation with
+        # no source). This is a genuinely new physical capability, not
+        # just another guarded external force.
+        #
+        # Mass added at a nonzero rate must ALSO carry momentum (the
+        # injected gas has some velocity), energy (it has some enthalpy/
+        # temperature), and -- now that mixture fraction is resolved --
+        # composition (pyrolyzate is Z=1, pure fuel). Four buffers, all
+        # zero-cost if not connected, mirroring every other _ext_ buffer:
+        self._ext_mdot   = _zeros.clone()   # [kg/(m^3.s)] volumetric mass source -> rhs_rho
+        self._ext_mdot_u = _zeros.clone()   # [kg/(m^2.s^2)] momentum carried by injected mass (mdot*u_inject) -> rhs_rhou
+        self._ext_mdot_v = _zeros.clone()   # ... -> rhs_rhov
+        self._ext_mdot_w = _zeros.clone()   # ... -> rhs_rhow
+        self._ext_mdot_e = _zeros.clone()   # [W/m^3] energy carried by injected mass -> rhs_rhoE
+        self._ext_mdot_Z = _zeros.clone()   # [kg/(m^3.s)] mixture-fraction flux carried by injected mass -> rhs_RZ
+        # (a mass source with no matching _ext_mdot_u/v/w/e/Z is physically
+        # a source with zero injection velocity and zero enthalpy/
+        # composition -- unusual but not forbidden; the bridge writing
+        # these buffers is responsible for setting all of them together
+        # consistently for a real physical source.)
+        #
+        # Separate, dimensionally-distinct scaling knob from
+        # combustion_nondim_scale (mass-rate and energy-rate source terms
+        # have different reference-scale groups; see the UNIT-CONSISTENCY
+        # FIX note in _compute_rhs). Default 1.0 = no conversion, same
+        # explicit-must-set-yourself philosophy as combustion_nondim_scale.
+        self.mdot_nondim_scale = float(getattr(cfg, "mdot_nondim_scale", 1.0))
+
+        self.radiation_method = str(getattr(cfg, "radiation_method", "P1"))  # "P1" | "DOM"
+        self.dom_n_polar      = int(getattr(cfg, "dom_n_polar", 4))
+        self.dom_n_azimuthal  = int(getattr(cfg, "dom_n_azimuthal", 8))
+        self.dom_n_iterations = int(getattr(cfg, "dom_n_iterations", 20))
+        self._dom_quadrature_cache = None   # built lazily on first DOM call
+
         self.energy_hist = []
         self.div_hist    = []
 
@@ -2104,7 +2241,90 @@ class CompressibleSolver:
 
     # ── RHS ─────────────────────────────────────────────────────────────────
 
-    def _compute_rhs(self, rho, rhou, rhov, rhow, rhoE, RZ, dt):
+    def _build_dom_quadrature(self, device, dtype):
+        """
+        [v6.7, opt-in] Product Gauss-Legendre(polar) x uniform(azimuthal)
+        discrete-ordinates quadrature over the unit sphere. Cached after
+        first build (direction set doesn't depend on solver state).
+
+        Validated (see fire_dns development notes): weights sum to
+        exactly 4*pi (total solid angle) to floating-point precision, and
+        all direction vectors are unit vectors, checked with a numpy
+        prototype of this exact construction before being ported here.
+        """
+        if self._dom_quadrature_cache is not None:
+            return self._dom_quadrature_cache
+        mu_nodes, mu_weights = np.polynomial.legendre.leggauss(self.dom_n_polar)
+        phi = np.linspace(0, 2 * np.pi, self.dom_n_azimuthal, endpoint=False)
+        dphi = 2 * np.pi / self.dom_n_azimuthal
+        dirs, wts = [], []
+        for mu, w_mu in zip(mu_nodes, mu_weights):
+            sin_t = np.sqrt(max(1.0 - mu**2, 0.0))
+            for p in phi:
+                dirs.append((sin_t * np.cos(p), sin_t * np.sin(p), mu))
+                wts.append(w_mu * dphi)
+        dirs_t = torch.tensor(np.array(dirs), device=device, dtype=dtype)
+        wts_t  = torch.tensor(np.array(wts),  device=device, dtype=dtype)
+        self._dom_quadrature_cache = (dirs_t, wts_t)
+        return self._dom_quadrature_cache
+
+    def _solve_dom_radiation(self, T_real: torch.Tensor, kappa: float, dx: float) -> torch.Tensor:
+        """
+        [v6.7, opt-in -- cfg.radiation_method="DOM", default "P1"]
+        Discrete-ordinates radiative transport, solved via SOURCE
+        ITERATION (fixed-point/Jacobi iteration on the upwind-discretized
+        RTE along each quadrature direction) rather than a literal
+        sequential sweep -- sweeps don't parallelize on tensor hardware
+        (each cell depends on an already-updated upwind neighbor within
+        the same pass), whereas source iteration is a real, standard
+        method for the same equation set that DOES vectorize (every
+        direction, every cell, updated simultaneously from the PREVIOUS
+        iteration's field), at the cost of needing multiple iterations to
+        converge. This is an approximation quality/cost trade against a
+        true single-pass sweep, not a different physical model.
+
+        ASSUMES PERIODIC BOUNDARIES (uses torch.roll for upwind shifts,
+        matching this solver's default circular-padding convention) --
+        same limitation as the P1/FFT radiation path, NOT rigorously
+        valid for a wall-dominated enclosure (no wall emissivity/
+        reflection boundary condition is modeled here at all).
+
+        For each direction s=(mu,eta,xi), solves the steady upwind
+        discretization of:
+            s . grad(I) + kappa*I = kappa*I_b
+        via Jacobi iteration, then accumulates the incident radiation
+        G = sum_i(weight_i * I_i) and returns the net volumetric
+        radiative source q_rad = kappa*(4*sigma*T^4 - G), matching the
+        same physical quantity and sign convention as the P1 path.
+        """
+        sigma_sb = 5.670374e-8
+        I_b = sigma_sb * T_real**4 / math.pi   # Planck intensity, isotropic assumption
+        dirs, wts = self._build_dom_quadrature(T_real.device, T_real.dtype)
+
+        G = torch.zeros_like(T_real)
+        for d in range(dirs.shape[0]):
+            mu_x, mu_y, mu_z = dirs[d, 0].item(), dirs[d, 1].item(), dirs[d, 2].item()
+            denom = (abs(mu_x) + abs(mu_y) + abs(mu_z)) / dx + kappa
+            I = I_b.clone()   # initial guess: local blackbody intensity
+            for _ in range(self.dom_n_iterations):
+                # Upwind neighbor via torch.roll: shift OPPOSITE to the
+                # sign of the direction cosine so we read the cell the
+                # radiation is coming FROM (periodic wrap = the
+                # documented assumption above).
+                Ix = torch.roll(I, shifts=1 if mu_x >= 0 else -1, dims=0)
+                Iy = torch.roll(I, shifts=1 if mu_y >= 0 else -1, dims=1)
+                Iz = torch.roll(I, shifts=1 if mu_z >= 0 else -1, dims=2)
+                numer = (kappa * I_b
+                         + (abs(mu_x) / dx) * Ix
+                         + (abs(mu_y) / dx) * Iy
+                         + (abs(mu_z) / dx) * Iz)
+                I = numer / denom
+            G = G + wts[d] * I
+
+        q_rad = kappa * (4.0 * sigma_sb * T_real**4 - G)
+        return q_rad
+
+    def _compute_rhs(self, rho, rhou, rhov, rhow, rhoE, RZ, RS, dt):
         dx    = self.dx
         gamma = self.gamma
         nx,ny,nz = rho.shape
@@ -2387,31 +2607,118 @@ class CompressibleSolver:
         # radiation results in a walled enclosure.
         if self.enable_radiation:
             # Same T_ref conversion and UNRESOLVED nondim-scaling caveat as
-            # the combustion block above applies here.
+            # the combustion block above applies here (both branches).
             T_real = T * self.T_ref
             kappa = self.radiation_absorption_coeff
             sigma_sb = 5.670374e-8
-            S_rad = 4.0 * kappa * sigma_sb * T_real**4
-            S_hat = torch.fft.fftn(S_rad)
-            kx = torch.fft.fftfreq(nx, d=dx, device=rho.device) * 2 * math.pi
-            ky = torch.fft.fftfreq(ny, d=dx, device=rho.device) * 2 * math.pi
-            kz = torch.fft.fftfreq(nz, d=dx, device=rho.device) * 2 * math.pi
-            KX, KY, KZ = torch.meshgrid(kx, ky, kz, indexing="ij")
-            k2 = KX**2 + KY**2 + KZ**2
-            denom = kappa + k2 / (3.0 * kappa + 1e-12)
-            G_hat = S_hat / denom
-            G = torch.real(torch.fft.ifftn(G_hat))
-            q_rad_dimensional = kappa * (4.0 * sigma_sb * T_real**4 - G)   # [W/m^3]
+
+            if self.radiation_method == "DOM":
+                # v6.7, opt-in (cfg.radiation_method="DOM"). See
+                # _solve_dom_radiation's docstring for the source-
+                # iteration method and its periodic-BC assumption.
+                q_rad_dimensional = self._solve_dom_radiation(T_real, kappa, dx)
+            else:
+                # v6.6 default: P1 diffusion approximation via FFT.
+                S_rad = 4.0 * kappa * sigma_sb * T_real**4
+                S_hat = torch.fft.fftn(S_rad)
+                kx = torch.fft.fftfreq(nx, d=dx, device=rho.device) * 2 * math.pi
+                ky = torch.fft.fftfreq(ny, d=dx, device=rho.device) * 2 * math.pi
+                kz = torch.fft.fftfreq(nz, d=dx, device=rho.device) * 2 * math.pi
+                KX, KY, KZ = torch.meshgrid(kx, ky, kz, indexing="ij")
+                k2 = KX**2 + KY**2 + KZ**2
+                denom = kappa + k2 / (3.0 * kappa + 1e-12)
+                G_hat = S_hat / denom
+                G = torch.real(torch.fft.ifftn(G_hat))
+                q_rad_dimensional = kappa * (4.0 * sigma_sb * T_real**4 - G)   # [W/m^3]
+
             q_rad = q_rad_dimensional * self.combustion_nondim_scale
             rhs_rhoE = rhs_rhoE - q_rad
 
-        return rhs_rho, rhs_rhou, rhs_rhov, rhs_rhow, rhs_rhoE, rhs_RZ
+        # ── v6.7: soot transport (opt-in, cfg.enable_soot) ──────────────────
+        # Parallels the RZ transport above: rho*Y_soot carried as a
+        # conserved scalar via the SAME centered-difference advection/
+        # diffusion scheme (same rationale: doesn't touch the compressible
+        # flux solver). Production/oxidation source only applied when
+        # BOTH enable_soot AND enable_combustion are True -- soot kinetics
+        # need Y_fuel/Y_O2/T from the resolved combustion state; with
+        # enable_combustion=False, soot is purely a passive (inert,
+        # never-produced) transported scalar, matching the "double-gated"
+        # safety approach for this whole feature set.
+        rhs_RS = torch.zeros_like(rho)
+        if self.enable_soot:
+            rho_safe2 = _softplus_floor(rho, 1e-8)
+            Y_soot = RS / rho_safe2
+            Ys_p = self._pad_field(Y_soot)
+            dYsdx = ddx(Ys_p); dYsdy = ddy(Ys_p); dYsdz = ddz(Ys_p)
+            D_S = torch.clamp(mu_eff / (rho_safe2 * self.soot_schmidt), min=1e-6)
+
+            adv_RS = -(ddx(self._pad_field(rho*u*Y_soot)) +
+                       ddy(self._pad_field(rho*v*Y_soot)) +
+                       ddz(self._pad_field(rho*w*Y_soot)))
+            diff_RS = (ddx(self._pad_field(rho*D_S*dYsdx)) +
+                       ddy(self._pad_field(rho*D_S*dYsdy)) +
+                       ddz(self._pad_field(rho*D_S*dYsdz)))
+            rhs_RS = adv_RS + diff_RS
+
+            if self.enable_combustion:
+                # Reuses the same Burke-Schumann state (Z, T_eq/T_real
+                # already computed above) to derive Y_fuel/Y_O2 at each
+                # cell (piecewise-linear state relations, matching
+                # fire_one.MixtureFractionCombustion.state_relations),
+                # then applies fire_one.SootKinetics' rate laws directly
+                # (same formulas, ported here to avoid importing fire_one
+                # into the DNS solver -- see fire_one.py for the
+                # standalone, independently-tested version of these exact
+                # rate expressions).
+                Zst2 = max(self.z_stoich, 1e-6)
+                Y_fuel = torch.where(Z > Zst2, (Z - Zst2) / max(1.0 - Zst2, 1e-6),
+                                      torch.zeros_like(Z))
+                Y_O2 = torch.where(Z < Zst2, 0.233 * (1.0 - Z / Zst2), torch.zeros_like(Z))
+                R_gas = 8.314
+                k_f = self.soot_A_formation * torch.exp(
+                    -self.soot_Ea_formation / (R_gas * torch.clamp(T_real, min=200.0)))
+                formation = torch.where(Z > Zst2, k_f * Y_fuel, torch.zeros_like(Z))
+                k_o = self.soot_A_oxidation * torch.exp(
+                    -self.soot_Ea_oxidation / (R_gas * torch.clamp(T_real, min=200.0)))
+                oxidation = k_o * Y_soot * Y_O2
+                # Rate is per unit time on Y_soot; convert to a source on
+                # the CONSERVED RS=rho*Y_soot: d(RS)/dt|_reaction = rho*(formation-oxidation).
+                rhs_RS = rhs_RS + rho * (formation - oxidation)
+
+        # ── v6.8: external mass source (continuity + carried quantities) ────
+        # See __init__ for buffer descriptions. This is the ONLY place in
+        # this file where rhs_rho gets a source term at all -- continuity
+        # was exactly closed (convective terms only) before this. Guarded
+        # exactly like every other _ext_ buffer.
+        #
+        # UNIT-CONSISTENCY FIX: an earlier version of this block added the
+        # _ext_mdot* buffers (written in REAL/dimensional units by
+        # PyrolysisDNSBridge -- kg/(m^3.s), etc.) directly into this
+        # solver's NON-DIMENSIONAL rhs_rho/rhou/rhov/rhow/rhoE/RZ, with no
+        # conversion at all -- the exact same class of bug already found
+        # and fixed once for combustion/radiation (v6.6). Worse: mass-rate
+        # and energy-rate source terms have DIFFERENT dimensional groups
+        # (mass: ~L_ref/(rho_ref*U_ref); energy: ~L_ref/(rho_ref*U_ref^3)),
+        # so reusing combustion_nondim_scale here would itself be
+        # dimensionally wrong even if a conversion had been applied. A
+        # SEPARATE, explicitly-flagged mdot_nondim_scale is used instead.
+        if self._ext_mdot.abs().max() > 1e-30:
+            mdot_scale = self.mdot_nondim_scale
+            rhs_rho  = rhs_rho  + self._ext_mdot   * mdot_scale
+            rhs_rhou = rhs_rhou + self._ext_mdot_u * mdot_scale
+            rhs_rhov = rhs_rhov + self._ext_mdot_v * mdot_scale
+            rhs_rhow = rhs_rhow + self._ext_mdot_w * mdot_scale
+            rhs_rhoE = rhs_rhoE + self._ext_mdot_e * mdot_scale
+            rhs_RZ   = rhs_RZ   + self._ext_mdot_Z * mdot_scale
+
+        return rhs_rho, rhs_rhou, rhs_rhov, rhs_rhow, rhs_rhoE, rhs_RZ, rhs_RS
 
     # ── TVD-RK3 time integration ─────────────────────────────────────────────
 
     def step(self, dt=None):
         rho,rhou,rhov,rhow,rhoE = self.rho,self.rhou,self.rhov,self.rhow,self.rhoE
         RZ = self.RZ
+        RS = self.RS
         gamma = self.gamma; dx = self.dx
 
         if dt is None:
@@ -2434,29 +2741,34 @@ class CompressibleSolver:
             return r,ru,rv,rw,rE
 
         # Stage 1
-        k1 = self._compute_rhs(rho,rhou,rhov,rhow,rhoE,RZ,dt)
+        k1 = self._compute_rhs(rho,rhou,rhov,rhow,rhoE,RZ,RS,dt)
         r1=rho+dt*k1[0]; ru1=rhou+dt*k1[1]; rv1=rhov+dt*k1[2]; rw1=rhow+dt*k1[3]; rE1=rhoE+dt*k1[4]
         RZ1 = RZ + dt*k1[5]
+        RS1 = RS + dt*k1[6]
         r1,ru1,rv1,rw1,rE1 = _stage(r1,ru1,rv1,rw1,rE1)
         RZ1 = torch.clamp(RZ1, min=0.0)   # RZ=rho*Z, Z>=0 physically; floor only, no upper clamp (r1 not yet known outside _stage's own floors)
+        RS1 = torch.clamp(RS1, min=0.0)
 
         # Stage 2
-        k2 = self._compute_rhs(r1,ru1,rv1,rw1,rE1,RZ1,dt)
+        k2 = self._compute_rhs(r1,ru1,rv1,rw1,rE1,RZ1,RS1,dt)
         r2=0.75*rho+0.25*(r1+dt*k2[0]); ru2=0.75*rhou+0.25*(ru1+dt*k2[1])
         rv2=0.75*rhov+0.25*(rv1+dt*k2[2]); rw2=0.75*rhow+0.25*(rw1+dt*k2[3])
         rE2=0.75*rhoE+0.25*(rE1+dt*k2[4])
         RZ2=0.75*RZ+0.25*(RZ1+dt*k2[5])
+        RS2=0.75*RS+0.25*(RS1+dt*k2[6])
         r2,ru2,rv2,rw2,rE2 = _stage(r2,ru2,rv2,rw2,rE2)
         RZ2 = torch.clamp(RZ2, min=0.0)
+        RS2 = torch.clamp(RS2, min=0.0)
 
         # Stage 3
-        k3 = self._compute_rhs(r2,ru2,rv2,rw2,rE2,RZ2,dt)
+        k3 = self._compute_rhs(r2,ru2,rv2,rw2,rE2,RZ2,RS2,dt)
         rho_n =(1./3.)*rho +(2./3.)*(r2 +dt*k3[0])
         rhou_n=(1./3.)*rhou+(2./3.)*(ru2+dt*k3[1])
         rhov_n=(1./3.)*rhov+(2./3.)*(rv2+dt*k3[2])
         rhow_n=(1./3.)*rhow+(2./3.)*(rw2+dt*k3[3])
         rhoE_n=(1./3.)*rhoE+(2./3.)*(rE2+dt*k3[4])
         RZ_n  =(1./3.)*RZ  +(2./3.)*(RZ2+dt*k3[5])
+        RS_n  =(1./3.)*RS  +(2./3.)*(RS2+dt*k3[6])
         rho_n,rhou_n,rhov_n,rhow_n,rhoE_n = _stage(rho_n,rhou_n,rhov_n,rhow_n,rhoE_n)
 
         # DIFF-FIX 7: softplus floor instead of hard clamp
@@ -2474,8 +2786,12 @@ class CompressibleSolver:
         RZ_n = torch.clamp(RZ_n, min=0.0, max=None)
         RZ_n = torch.minimum(RZ_n, rho_n)   # Z<=1 => RZ<=rho
 
+        # v6.7: same [0,1] mass-fraction enforcement for soot.
+        RS_n = torch.clamp(RS_n, min=0.0, max=None)
+        RS_n = torch.minimum(RS_n, rho_n)
+
         self.rho=rho_n; self.rhou=rhou_n; self.rhov=rhov_n
-        self.rhow=rhow_n; self.rhoE=rhoE_n; self.RZ=RZ_n
+        self.rhow=rhow_n; self.rhoE=rhoE_n; self.RZ=RZ_n; self.RS=RS_n
         self.step_count += 1; self.time += dt.item() if hasattr(dt,'item') else dt
 
         if self.rg is not None and self.step_count % self.cfg.rg_interval == 0:
@@ -2494,6 +2810,11 @@ class CompressibleSolver:
     def Z(self):
         """Mixture fraction (primitive), derived from the conserved RZ=rho*Z."""
         return self.RZ / _softplus_floor(self.rho, 1e-8)
+
+    @property
+    def Y_soot(self):
+        """Soot mass fraction (primitive), derived from conserved RS=rho*Y_soot."""
+        return self.RS / _softplus_floor(self.rho, 1e-8)
 
     # ── Diagnostics ──────────────────────────────────────────────────────────
 
@@ -2695,6 +3016,7 @@ class CompressibleSolver:
             'rhow':        self.rhow.cpu(),
             'rhoE':        self.rhoE.cpu(),
             'RZ':          self.RZ.cpu(),   # v6.6: mixture-fraction conserved field
+            'RS':          self.RS.cpu(),   # v6.7: soot conserved field
             'soc_kernel_state_dict': self.soc.kernel.state_dict(),
             'ssc_prev':    ssc_state,
         }
@@ -2725,6 +3047,17 @@ class CompressibleSolver:
                     "but enable_combustion=True -- resuming with Z=0 "
                     "(unburnt) everywhere, not the actual prior mixture-"
                     "fraction state."
+                )
+        # v6.7: same backward-compatible pattern for soot.
+        if 'RS' in state:
+            self.RS = state['RS'].to(self.device)
+        else:
+            self.RS = torch.zeros_like(self.rho)
+            if self.enable_soot:
+                logger.warning(
+                    "load_checkpoint: checkpoint has no 'RS' field but "
+                    "enable_soot=True -- resuming with Y_soot=0 everywhere, "
+                    "not the actual prior soot state."
                 )
         if 'soc_kernel_state_dict' in state:
             self.soc.kernel.load_state_dict(state['soc_kernel_state_dict'])
