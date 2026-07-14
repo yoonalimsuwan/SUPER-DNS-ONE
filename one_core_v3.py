@@ -1,7 +1,7 @@
 # =============================================================================
 # ONE CORE — Shared Foundation of the ONE Ecosystem
 # =============================================================================
-# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Developer : Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 # Year      : 2026
 # ORCID     : 0009-0008-2374-0788
@@ -30,6 +30,7 @@
 #   CahnHilliardDNSBridge   — CH phase-field + Korteweg forces → DNS solver
 #   SeismicDNSBridge        — ground-motion pseudo body force → DNS solver
 #   HeatReleaseDNSBridge    — combustion/radiation heat release → DNS solver
+#   PyrolysisDNSBridge      — mass source (continuity) → DNS solver
 #
 # Rule: if a class appears in more than one solver file, it lives here and
 # is imported from here.  Individual solver files must NOT redefine these
@@ -67,6 +68,20 @@
 #             construction if the solver predates that fix, rather than
 #             risking another silent-no-op buffer (the exact failure mode
 #             _ext_nu_ch taught this ecosystem to guard against).
+#   3.4.0  — PyrolysisDNSBridge added (genuine mass source → DNS
+#             continuity equation, for FIRE ONE / fire_one.PyrolysisModel
+#             pyrolysis mass flux). Requires super_dns_one_v6_3.py v6.8+
+#             (new _ext_mdot* buffer family). Writes 5 buffers together
+#             (mass + carried momentum/energy/mixture-fraction) so a
+#             partial source spec still produces a physically consistent
+#             set rather than stale leftover values. UNIT-CONSISTENCY
+#             NOTE: the solver-side consumption of these buffers was
+#             initially missing the same nondim-scale conversion already
+#             required for combustion/radiation (v6.6) -- caught and
+#             fixed with a SEPARATE cfg.mdot_nondim_scale (mass-rate and
+#             energy-rate source terms are different dimensional groups,
+#             so they cannot share combustion_nondim_scale even after a
+#             conversion is added). See that file's v6.7→v6.8 changelog.
 #
 # =============================================================================
 
@@ -82,7 +97,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-ONE_VERSION: str = "3.3.0"
+ONE_VERSION: str = "3.4.0"
 
 
 # =============================================================================
@@ -848,6 +863,107 @@ class HeatReleaseDNSBridge:
                     f".field(t) -> Tensor (got {type(self.q_dot).__name__})."
                 )
             self.dns._ext_q = field_fn(t).to(dev)
+
+
+# =============================================================================
+# 5f. Pyrolysis Mass-Source DNS Bridge Protocol  (ONE Core v3.4)
+# =============================================================================
+
+class PyrolysisDNSBridge:
+    """
+    Bridge: injects a genuine MASS source into the DNS solver's continuity
+    equation, for solid-fuel pyrolysis (fire_one.PyrolysisModel) or any
+    other real mass-injection process (fuel gasification, water-mist
+    evaporation, etc.).
+
+    Physics
+    ───────
+    Writes FIVE buffers together (dns_solver.v6.8+): _ext_mdot (mass),
+    _ext_mdot_u/v/w (momentum carried by the injected mass at its
+    injection velocity), _ext_mdot_e (energy carried by the injected
+    mass), and _ext_mdot_Z (mixture-fraction flux -- pyrolyzate is pure
+    fuel vapor, Z=1, so _ext_mdot_Z = _ext_mdot for a pyrolysis source).
+    This is the ONLY mechanism in this ecosystem that adds mass to the
+    gas phase at all -- continuity was, before v6.8, exactly closed
+    (conserved by the convective terms alone, no source term anywhere).
+
+    Source is duck-typed: `pyrolysis_source` is an object exposing
+    ``.field(t) -> dict`` with keys 'mdot' (kg/(m^3.s) volumetric mass
+    source Tensor), and optionally 'u_inject'/'v_inject'/'w_inject'
+    (injection velocity components, default 0 = mass added at rest --
+    physically means the injected gas is assumed to instantaneously
+    equilibrate to zero velocity, an approximation valid when injection
+    velocity is small relative to the surrounding flow), 'T_inject_K'
+    (default 300K -- used to derive the carried energy via
+    cp_gas*T_inject, matching the cp_gas convention already used for
+    combustion in this solver), and 'Z_inject' (default 1.0 -- pure fuel;
+    override for a source that isn't pure fuel vapor, e.g. water-mist
+    evaporation would use Z_inject=0 since water vapor isn't a
+    combustible mixture-fraction constituent in this solver's model).
+
+    IMPORTANT: requires super_dns_one_v6_3.py v6.8+ (the _ext_mdot* buffer
+    family). Raises clearly at construction otherwise, same pattern as
+    HeatReleaseDNSBridge's _ext_q check.
+
+    Usage::
+
+        bridge = PyrolysisDNSBridge(dns_solver, pyrolysis_source=my_source)
+        for step in range(n_steps):
+            bridge.sync()
+            dns_solver.step()
+    """
+
+    def __init__(self, dns_solver, pyrolysis_source=None) -> None:
+        required = ("_ext_mdot", "_ext_mdot_u", "_ext_mdot_v",
+                    "_ext_mdot_w", "_ext_mdot_e", "_ext_mdot_Z")
+        missing = [b for b in required if not hasattr(dns_solver, b)]
+        if missing:
+            raise RuntimeError(
+                f"dns_solver is missing buffer(s) {missing} -- this bridge "
+                "requires super_dns_one_v6_3.py v6.8+ (mass-source buffer "
+                "family added to continuity). Writing to a nonexistent/"
+                "unconsumed buffer would silently produce a no-op "
+                "simulation (the exact failure mode _ext_nu_ch taught "
+                "this ecosystem to guard against)."
+            )
+        self.dns = dns_solver
+        self.source = pyrolysis_source
+        self.cp_gas = float(getattr(dns_solver, "cp_gas", 1400.0))
+
+    def sync(self) -> None:
+        """
+        Call once per outer step, BEFORE dns_solver.step(). Overwrites all
+        five _ext_mdot* buffers together (not accumulate), so a partial
+        field dict (e.g. only 'mdot', no velocity keys) still produces a
+        fully self-consistent set of buffers each call -- missing keys
+        default to physically well-defined values (rest injection, T=300K,
+        pure fuel) rather than leaving stale values from a previous call.
+        """
+        if self.source is None:
+            return
+        field_fn = getattr(self.source, "field", None)
+        if not callable(field_fn):
+            raise TypeError(
+                "pyrolysis_source must be None or an object exposing "
+                f".field(t) -> dict (got {type(self.source).__name__})."
+            )
+        t = float(self.dns.time)
+        dev = self.dns.device
+        with torch.no_grad():
+            f = field_fn(t)
+            mdot = f["mdot"].to(dev)
+            u_inj = f.get("u_inject", torch.zeros_like(mdot))
+            v_inj = f.get("v_inject", torch.zeros_like(mdot))
+            w_inj = f.get("w_inject", torch.zeros_like(mdot))
+            T_inj = f.get("T_inject_K", 300.0)
+            Z_inj = f.get("Z_inject", 1.0)
+
+            self.dns._ext_mdot   = mdot
+            self.dns._ext_mdot_u = (mdot * u_inj).to(dev)
+            self.dns._ext_mdot_v = (mdot * v_inj).to(dev)
+            self.dns._ext_mdot_w = (mdot * w_inj).to(dev)
+            self.dns._ext_mdot_e = (mdot * self.cp_gas * T_inj).to(dev)
+            self.dns._ext_mdot_Z = (mdot * Z_inj).to(dev)
 
 
 # =============================================================================
