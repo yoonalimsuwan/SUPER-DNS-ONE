@@ -1,7 +1,7 @@
 """
 FIRE ONE — Fire Dynamics Engineering Module for the ONE Ecosystem
 ====================================================================
-# Developer : Yoon A Limsuwan / MSPS NETWORK
+# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 
 Fire engineering analysis, analogous in structure to seismic_one.py:
