@@ -2,6 +2,9 @@
 FIRE-DNS COUPLING ONE — Interface between FIRE ONE and SUPER DNS ONE
 ========================================================================
 
+# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# License: MIT
+
 Couples fire engineering outputs (fire_one.py) to CFD source terms for
 SUPER DNS ONE, via the canonical bridges in one_core_v3.py.
 
