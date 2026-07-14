@@ -223,7 +223,7 @@ The solver includes several built‑in diagnostics:
 1. Taylor–Green vortex – monitor kinetic energy dissipation rate vs. analytical solution.
 2. Kolmogorov spectrum – compute the energy spectrum E(k) and fit the inertial‑range slope (theoretical −5/3).
 3. Grid convergence test – compute the observed order of accuracy using Richardson extrapolation on successive grid refinements.
-4. BV conservation checks – track maximum divergence, stress balance, and energy history.
+
 
 Results are logged to the console and can be extended by the user.
 
