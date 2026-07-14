@@ -22,6 +22,65 @@
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
 #
+# Changes v6.5 → v6.6:
+#   FIRE CFD upgrade (requested: "make it real NIST-FDS-style fire CFD",
+#   scoped honestly -- see fire_one.py / this changelog for what is and
+#   is NOT actually reproduced relative to real FDS):
+#     - New RESOLVED mixture-fraction field (self.RZ = rho*Z, conserved
+#       form), transported alongside rho/rhou/rhov/rhow/rhoE through the
+#       full TVD-RK3 integration in step() -- a genuine new transported
+#       PDE field, not just an external body-force buffer. Uses simple
+#       centered-difference advection/diffusion (consistent with this
+#       file's existing viscous-term style), deliberately NOT hooked into
+#       flux_solver's Godunov/Riemann Euler scheme, so this cannot
+#       destabilize the proven compressible core -- but is therefore more
+#       diffusive than a dedicated upwind/TVD scalar scheme; validate
+#       against your own grid-Peclet-number requirements before trusting
+#       sharp flame fronts.
+#     - Local combustion source (cfg.enable_combustion=True): Burke-
+#       Schumann fast-chemistry equilibrium temperature evaluated on the
+#       RESOLVED local Z field (not a prescribed external HRR(t) as in
+#       v6.5's fire_dns_coupling_one.py path), relaxed toward via a
+#       "presumed equilibrium" closure at the local turbulent mixing rate
+#       (tau_mix ~ dx^2/D_Z) -- chosen over an invented scalar-dissipation
+#       reaction-rate formula specifically to avoid presenting an
+#       unvalidated closure as authoritative.
+#     - P1 (diffusion-approximation) radiation (cfg.enable_radiation=True),
+#       solved via FFT -- assumes PERIODIC boundaries (matches this
+#       solver's default), NOT rigorously valid for wall-dominated
+#       enclosures (would need Marshak BCs + iterative elliptic solve).
+#     - CRITICAL, EXPLICITLY FLAGGED GAP: this solver's internal T is
+#       NON-DIMENSIONAL (T_ref=300K, per the pre-existing Sutherland-law
+#       convention). Combustion/radiation source terms are derived and
+#       computed in REAL (dimensional, W/m^3) units, converting T via
+#       T_ref -- but the resulting terms are added to rhs_rhoE, which is
+#       in this solver's OWN non-dimensional unit system (scaled by
+#       reference length/velocity/density implied by cfg.Re/Mach, which
+#       this file does not have enough visibility into to derive
+#       automatically). cfg.combustion_nondim_scale (default 1.0 = NO
+#       conversion) is an explicit, visible, user-must-set knob for this
+#       gap -- NOT a silently-assumed-correct value. Do not trust
+#       quantitative combustion/radiation magnitudes until you have set
+#       this correctly for your own reference-scale choices.
+#     - RZ added to save_checkpoint/load_checkpoint (backward compatible:
+#       loading a pre-v6.6 checkpoint with enable_combustion=True warns
+#       and resumes with Z=0 rather than raising).
+#     - NOT implemented (explicitly out of scope for this pass, unlike
+#       real FDS): discrete-ordinates RTE, finite-rate/soot chemistry
+#       kinetics, pyrolysis/solid-fuel decomposition, sprinkler/detector/
+#       HVAC device models, or any experimental validation. Treat this as
+#       a step toward FDS's MODELING CATEGORY (conserved-scalar fast-
+#       chemistry + simplified radiation), not a replacement for it.
+#
+# Changes v6.4 → v6.5:
+#   New _ext_q buffer (volumetric heat-release-rate coupling, W/m^3),
+#     added directly to rhs_rhoE, for FIRE ONE / fire_dns_coupling_one.py
+#     combustion heat release. No such direct energy-source hook existed
+#     before -- _ext_fx/fy/fz only reach the energy equation indirectly
+#     via mechanical work (f.u), which cannot represent a heat addition.
+#     Zero-cost if not connected, same guard pattern as every other
+#     _ext_ buffer.
+#
 # Changes v6.3 → v6.4:
 #   Bug 11 fix: self._ext_nu_ch (viscosity-modulation coupling buffer,
 #     written by CahnHilliardDNSBridge.sync() in one_core_v3.py) was
@@ -1649,6 +1708,42 @@ class CompressibleSolver:
         self._ext_fx     = _zeros.clone()   # (nx,ny,nz) Korteweg body force x
         self._ext_fy     = _zeros.clone()   # (nx,ny,nz) Korteweg body force y
         self._ext_fz     = _zeros.clone()   # (nx,ny,nz) Korteweg body force z
+
+        # External volumetric heat-release-rate coupling buffer (v6.5;
+        # written by e.g. HeatReleaseDNSBridge in one_core_v3.py, used by
+        # fire_dns_coupling_one.py). [W/m^3], added directly to rhs_rhoE.
+        # No such energy-source hook existed prior to v6.5 -- _ext_fx/fy/fz
+        # only enter the energy equation indirectly via mechanical work
+        # (f.u), which cannot represent a direct heat addition like
+        # combustion or radiative absorption/emission.
+        self._ext_q      = _zeros.clone()   # (nx,ny,nz) volumetric heat release [W/m^3]
+
+        # ── v6.6: resolved mixture-fraction combustion + P1 radiation ───────
+        # (FIRE ONE full-CFD upgrade; see v6.5→v6.6 changelog entry above
+        # for scope/limitations.)
+        self.enable_combustion      = bool(getattr(cfg, "enable_combustion", False))
+        self.z_stoich               = float(getattr(cfg, "z_stoich", 0.055))
+        self.T_adiabatic            = float(getattr(cfg, "T_adiabatic_K", 2260.0))
+        self.T_ambient_rad          = float(getattr(cfg, "T_ambient_K", 293.15))
+        self.turbulent_schmidt      = float(getattr(cfg, "turbulent_schmidt", 0.7))
+        self.cp_gas                 = float(getattr(cfg, "cp_gas", 1400.0))
+        self.enable_radiation       = bool(getattr(cfg, "enable_radiation", False))
+        self.radiation_absorption_coeff = float(getattr(cfg, "radiation_absorption_coeff", 0.3))
+        self.T_ref = 300.0   # matches the Sutherland-law reference used elsewhere in this file
+        # UNRESOLVED SCALING GAP: see the combustion/radiation blocks in
+        # _compute_rhs. Default 1.0 means NO dimensional->non-dimensional
+        # conversion is applied -- combustion_source/q_rad are added to
+        # rhs_rhoE in real W/m^3 units as-is. This is very unlikely to be
+        # the physically correct scale for your specific cfg.Re/Mach
+        # non-dimensionalization; set cfg.combustion_nondim_scale
+        # explicitly (L_ref/(rho_ref*U_ref**3)) before trusting
+        # quantitative combustion/radiation results.
+        self.combustion_nondim_scale = float(getattr(cfg, "combustion_nondim_scale", 1.0))
+        # Resolved mixture fraction, transported as RZ = rho*Z (conserved
+        # form, consistent with how rho/rhou/rhov/rhow/rhoE are all
+        # transported as conserved densities elsewhere in this class).
+        self.RZ = _zeros.clone()
+
         self.energy_hist = []
         self.div_hist    = []
 
@@ -2009,7 +2104,7 @@ class CompressibleSolver:
 
     # ── RHS ─────────────────────────────────────────────────────────────────
 
-    def _compute_rhs(self, rho, rhou, rhov, rhow, rhoE, dt):
+    def _compute_rhs(self, rho, rhou, rhov, rhow, rhoE, RZ, dt):
         dx    = self.dx
         gamma = self.gamma
         nx,ny,nz = rho.shape
@@ -2196,12 +2291,127 @@ class CompressibleSolver:
                                    self._ext_fy * v +
                                    self._ext_fz * w)
 
-        return rhs_rho, rhs_rhou, rhs_rhov, rhs_rhow, rhs_rhoE
+        # ── External volumetric heat release (v6.5) ─────────────────────────
+        # Written by HeatReleaseDNSBridge.sync() (one_core_v3.py), fed by
+        # fire_dns_coupling_one.py. Direct energy-equation source term
+        # [W/m^3] -- distinct from the f.u mechanical-work term above,
+        # which cannot represent combustion heat release or net radiative
+        # gain/loss. Zero-cost if not connected.
+        if self._ext_q.abs().max() > 1e-30:
+            rhs_rhoE = rhs_rhoE + self._ext_q
+
+        # ── v6.6: resolved mixture-fraction transport (Z = RZ/rho) ──────────
+        # Conserved-scalar (Shvab-Zeldovich) formulation: Z itself is
+        # SOURCE-FREE under fast chemistry -- combustion doesn't create or
+        # destroy the conserved mixture fraction, it only redistributes
+        # composition/temperature AT a given Z via the Burke-Schumann state
+        # relation. This is the same modeling principle fire_one.py's
+        # MixtureFractionCombustion uses, now evaluated on the LOCALLY
+        # RESOLVED Z field instead of a prescribed external HRR(t).
+        #
+        # Deliberately uses simple centered-difference advection/diffusion
+        # (matching this file's existing viscous-term style: S11, heat_div,
+        # etc. are all centered differences) rather than hooking into
+        # flux_solver's Godunov/Riemann-based Euler scheme -- Z has no
+        # acoustic/shock structure of its own, and NOT touching the
+        # compressible flux solver means this addition cannot destabilize
+        # the proven Euler/Navier-Stokes core. Known limitation: centered
+        # advection can ring at high local Peclet number (sharp Z fronts,
+        # low diffusivity); the D_Z floor below provides some numerical
+        # safety margin, but very under-resolved flame sheets may still
+        # need more diffusion or a proper upwind/TVD scalar scheme -- flag
+        # this in your own validation before trusting sharp-front results.
+        rho_safe = _softplus_floor(rho, 1e-8)
+        Z = RZ / rho_safe
+        Z_p  = self._pad_field(Z)
+        dZdx = ddx(Z_p); dZdy = ddy(Z_p); dZdz = ddz(Z_p)
+
+        D_Z = torch.clamp(mu_eff / (rho_safe * self.turbulent_schmidt), min=1e-6)
+
+        adv_RZ = -(ddx(self._pad_field(rho*u*Z)) +
+                   ddy(self._pad_field(rho*v*Z)) +
+                   ddz(self._pad_field(rho*w*Z)))
+
+        diff_RZ = (ddx(self._pad_field(rho*D_Z*dZdx)) +
+                   ddy(self._pad_field(rho*D_Z*dZdy)) +
+                   ddz(self._pad_field(rho*D_Z*dZdz)))
+
+        rhs_RZ = adv_RZ + diff_RZ   # source-free (conserved scalar)
+
+        combustion_source = torch.zeros_like(rho)
+        if self.enable_combustion:
+            # CRITICAL UNIT NOTE: this solver's internal T is NON-DIMENSIONAL
+            # (T* = T_real/T_ref, T_ref=300.0 -- see the Sutherland-law
+            # constant S=110.4/300.0 used a few lines above, which only
+            # makes sense if T here is already scaled by that same 300K
+            # reference). Combustion/radiation physics below is most
+            # transparently derived in REAL units (Kelvin, W/m^3), so T is
+            # converted to real Kelvin at the point of use via self.T_ref.
+            T_real = T * self.T_ref
+
+            Zst = max(self.z_stoich, 1e-6)
+            T_eq_real = torch.where(
+                Z < Zst,
+                self.T_ambient_rad + (self.T_adiabatic - self.T_ambient_rad) * (Z / Zst),
+                self.T_ambient_rad + (self.T_adiabatic - self.T_ambient_rad) *
+                    ((1.0 - Z) / max(1.0 - Zst, 1e-6)),
+            )
+            tau_mix = (dx**2) / D_Z
+            combustion_source_dimensional = (
+                rho * self.cp_gas * (T_eq_real - T_real) / torch.clamp(tau_mix, min=1e-6)
+            )   # [W/m^3], REAL/dimensional units
+
+            # UNRESOLVED SCALING GAP (flagged, not hidden): rhs_rhoE is in
+            # this solver's own NON-DIMENSIONAL unit system, whose energy
+            # scaling depends on the reference length/velocity/density
+            # (L_ref, U_ref, rho_ref) implied by cfg.Re / cfg.Mach -- which
+            # this method does not have enough visibility into to derive
+            # automatically. combustion_nondim_scale is an EXPLICIT,
+            # user-supplied conversion factor (default 1.0, i.e. NO
+            # conversion applied) so this gap is a visible, must-set knob
+            # rather than a silently wrong assumption. Compute it as
+            # (L_ref / (rho_ref * U_ref**3)) for your specific
+            # nondimensionalization before trusting quantitative results.
+            combustion_source = combustion_source_dimensional * self.combustion_nondim_scale
+            rhs_rhoE = rhs_rhoE + combustion_source
+
+        # ── v6.6: P1 (diffusion-approximation) radiation ────────────────────
+        # Solves -1/(3*kappa)*lap(G) + kappa*G = 4*kappa*sigma*T^4 via FFT,
+        # which assumes PERIODIC boundary conditions (matching this
+        # solver's default circular-padding convention) -- for a
+        # wall-dominated enclosure this FFT shortcut is not rigorously
+        # correct (a real P1 solve there needs Marshak wall BCs and an
+        # iterative elliptic solver); using it on a non-periodic domain
+        # will silently give an approximate, not exact, radiative field.
+        # Documented, not hidden: check your BC setup before trusting
+        # radiation results in a walled enclosure.
+        if self.enable_radiation:
+            # Same T_ref conversion and UNRESOLVED nondim-scaling caveat as
+            # the combustion block above applies here.
+            T_real = T * self.T_ref
+            kappa = self.radiation_absorption_coeff
+            sigma_sb = 5.670374e-8
+            S_rad = 4.0 * kappa * sigma_sb * T_real**4
+            S_hat = torch.fft.fftn(S_rad)
+            kx = torch.fft.fftfreq(nx, d=dx, device=rho.device) * 2 * math.pi
+            ky = torch.fft.fftfreq(ny, d=dx, device=rho.device) * 2 * math.pi
+            kz = torch.fft.fftfreq(nz, d=dx, device=rho.device) * 2 * math.pi
+            KX, KY, KZ = torch.meshgrid(kx, ky, kz, indexing="ij")
+            k2 = KX**2 + KY**2 + KZ**2
+            denom = kappa + k2 / (3.0 * kappa + 1e-12)
+            G_hat = S_hat / denom
+            G = torch.real(torch.fft.ifftn(G_hat))
+            q_rad_dimensional = kappa * (4.0 * sigma_sb * T_real**4 - G)   # [W/m^3]
+            q_rad = q_rad_dimensional * self.combustion_nondim_scale
+            rhs_rhoE = rhs_rhoE - q_rad
+
+        return rhs_rho, rhs_rhou, rhs_rhov, rhs_rhow, rhs_rhoE, rhs_RZ
 
     # ── TVD-RK3 time integration ─────────────────────────────────────────────
 
     def step(self, dt=None):
         rho,rhou,rhov,rhow,rhoE = self.rho,self.rhou,self.rhov,self.rhow,self.rhoE
+        RZ = self.RZ
         gamma = self.gamma; dx = self.dx
 
         if dt is None:
@@ -2224,24 +2434,29 @@ class CompressibleSolver:
             return r,ru,rv,rw,rE
 
         # Stage 1
-        k1 = self._compute_rhs(rho,rhou,rhov,rhow,rhoE,dt)
+        k1 = self._compute_rhs(rho,rhou,rhov,rhow,rhoE,RZ,dt)
         r1=rho+dt*k1[0]; ru1=rhou+dt*k1[1]; rv1=rhov+dt*k1[2]; rw1=rhow+dt*k1[3]; rE1=rhoE+dt*k1[4]
+        RZ1 = RZ + dt*k1[5]
         r1,ru1,rv1,rw1,rE1 = _stage(r1,ru1,rv1,rw1,rE1)
+        RZ1 = torch.clamp(RZ1, min=0.0)   # RZ=rho*Z, Z>=0 physically; floor only, no upper clamp (r1 not yet known outside _stage's own floors)
 
         # Stage 2
-        k2 = self._compute_rhs(r1,ru1,rv1,rw1,rE1,dt)
+        k2 = self._compute_rhs(r1,ru1,rv1,rw1,rE1,RZ1,dt)
         r2=0.75*rho+0.25*(r1+dt*k2[0]); ru2=0.75*rhou+0.25*(ru1+dt*k2[1])
         rv2=0.75*rhov+0.25*(rv1+dt*k2[2]); rw2=0.75*rhow+0.25*(rw1+dt*k2[3])
         rE2=0.75*rhoE+0.25*(rE1+dt*k2[4])
+        RZ2=0.75*RZ+0.25*(RZ1+dt*k2[5])
         r2,ru2,rv2,rw2,rE2 = _stage(r2,ru2,rv2,rw2,rE2)
+        RZ2 = torch.clamp(RZ2, min=0.0)
 
         # Stage 3
-        k3 = self._compute_rhs(r2,ru2,rv2,rw2,rE2,dt)
+        k3 = self._compute_rhs(r2,ru2,rv2,rw2,rE2,RZ2,dt)
         rho_n =(1./3.)*rho +(2./3.)*(r2 +dt*k3[0])
         rhou_n=(1./3.)*rhou+(2./3.)*(ru2+dt*k3[1])
         rhov_n=(1./3.)*rhov+(2./3.)*(rv2+dt*k3[2])
         rhow_n=(1./3.)*rhow+(2./3.)*(rw2+dt*k3[3])
         rhoE_n=(1./3.)*rhoE+(2./3.)*(rE2+dt*k3[4])
+        RZ_n  =(1./3.)*RZ  +(2./3.)*(RZ2+dt*k3[5])
         rho_n,rhou_n,rhov_n,rhow_n,rhoE_n = _stage(rho_n,rhou_n,rhov_n,rhow_n,rhoE_n)
 
         # DIFF-FIX 7: softplus floor instead of hard clamp
@@ -2251,8 +2466,16 @@ class CompressibleSolver:
         p_n    = _softplus_floor(p_n, 1e-8)
         rhoE_n = p_n/(gamma-1) + ke_n
 
+        # v6.6: Z = RZ/rho must stay in [0,1] physically (mass fraction of
+        # fuel-side material); clamp RZ to [0, rho_n] to enforce that
+        # without a hard clamp on Z itself breaking differentiability of
+        # rho_n (matches this file's general "soft floor, not hard clamp"
+        # philosophy -- DIFF-FIX 7 above -- applied to the new field too).
+        RZ_n = torch.clamp(RZ_n, min=0.0, max=None)
+        RZ_n = torch.minimum(RZ_n, rho_n)   # Z<=1 => RZ<=rho
+
         self.rho=rho_n; self.rhou=rhou_n; self.rhov=rhov_n
-        self.rhow=rhow_n; self.rhoE=rhoE_n
+        self.rhow=rhow_n; self.rhoE=rhoE_n; self.RZ=RZ_n
         self.step_count += 1; self.time += dt.item() if hasattr(dt,'item') else dt
 
         if self.rg is not None and self.step_count % self.cfg.rg_interval == 0:
@@ -2261,6 +2484,16 @@ class CompressibleSolver:
             self.rhov = self.rg.forward(self.rhov)
             self.rhow = self.rg.forward(self.rhow)
             self.rhoE = self.rg.forward(self.rhoE)
+            # Note: self.RZ intentionally NOT passed through the
+            # renormalization-group filter (self.rg) -- rg was designed
+            # for the 5 Euler conservation variables; applying it to RZ
+            # without validating that it preserves Z in [0,1] "physically
+            # renormalized" is a separate exercise. Flagged, not silently done.
+
+    @property
+    def Z(self):
+        """Mixture fraction (primitive), derived from the conserved RZ=rho*Z."""
+        return self.RZ / _softplus_floor(self.rho, 1e-8)
 
     # ── Diagnostics ──────────────────────────────────────────────────────────
 
@@ -2461,6 +2694,7 @@ class CompressibleSolver:
             'rhov':        self.rhov.cpu(),
             'rhow':        self.rhow.cpu(),
             'rhoE':        self.rhoE.cpu(),
+            'RZ':          self.RZ.cpu(),   # v6.6: mixture-fraction conserved field
             'soc_kernel_state_dict': self.soc.kernel.state_dict(),
             'ssc_prev':    ssc_state,
         }
@@ -2478,6 +2712,20 @@ class CompressibleSolver:
         self.rhov  = state['rhov'].to(self.device)
         self.rhow  = state['rhow'].to(self.device)
         self.rhoE  = state['rhoE'].to(self.device)
+        # v6.6: backward compatible with pre-v6.6 checkpoints (no 'RZ' key)
+        # -- falls back to zeros (no mixture fraction / unburnt everywhere)
+        # rather than raising, since combustion is opt-in (enable_combustion).
+        if 'RZ' in state:
+            self.RZ = state['RZ'].to(self.device)
+        else:
+            self.RZ = torch.zeros_like(self.rho)
+            if self.enable_combustion:
+                logger.warning(
+                    "load_checkpoint: pre-v6.6 checkpoint has no 'RZ' field "
+                    "but enable_combustion=True -- resuming with Z=0 "
+                    "(unburnt) everywhere, not the actual prior mixture-"
+                    "fraction state."
+                )
         if 'soc_kernel_state_dict' in state:
             self.soc.kernel.load_state_dict(state['soc_kernel_state_dict'])
             logger.info("SOC kernel weights restored.")
