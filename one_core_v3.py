@@ -29,6 +29,7 @@
 #   CahnHilliardFHBridge    — CH phase-field density/viscosity → FH solver
 #   CahnHilliardDNSBridge   — CH phase-field + Korteweg forces → DNS solver
 #   SeismicDNSBridge        — ground-motion pseudo body force → DNS solver
+#   HeatReleaseDNSBridge    — combustion/radiation heat release → DNS solver
 #
 # Rule: if a class appears in more than one solver file, it lives here and
 # is imported from here.  Individual solver files must NOT redefine these
@@ -59,6 +60,13 @@
 #             contrast between CH phases had silently had zero effect in
 #             every prior coupled run. Fixed on the solver side; see that
 #             file's v6.3→v6.4 changelog entry.
+#   3.3.0  — HeatReleaseDNSBridge added (volumetric combustion/radiation
+#             heat release → DNS solver, for FIRE ONE / fire_one.py +
+#             fire_dns_coupling_one.py). Requires super_dns_one_v6_3.py
+#             v6.5+ (new _ext_q buffer + consumption); raises clearly at
+#             construction if the solver predates that fix, rather than
+#             risking another silent-no-op buffer (the exact failure mode
+#             _ext_nu_ch taught this ecosystem to guard against).
 #
 # =============================================================================
 
@@ -74,7 +82,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-ONE_VERSION: str = "3.2.0"
+ONE_VERSION: str = "3.3.0"
 
 
 # =============================================================================
@@ -760,6 +768,86 @@ class SeismicDNSBridge:
             if self.accel_z is not None:
                 az = self._eval(self.accel_z, t)
                 self.dns._ext_fz = (-rho * az).to(dev)
+
+
+# =============================================================================
+# 5e. Heat-Release-Rate DNS Bridge Protocol  (ONE Core v3.3)
+# =============================================================================
+
+class HeatReleaseDNSBridge:
+    """
+    Bridge: injects a volumetric heat-release-rate (HRR) source field into
+    the DNS/LES compressible solver's energy equation -- for FIRE ONE
+    (fire_one.py) combustion/radiation coupling via
+    fire_dns_coupling_one.py.
+
+    Physics
+    ───────
+    Writes dns_solver._ext_q [W/m^3], added directly to rhs_rhoE
+    (CompressibleSolver._compute_rhs, v6.5+). This is NOT the same
+    mechanism as SeismicDNSBridge's _ext_fx/fy/fz: those enter the energy
+    equation only indirectly via mechanical work (f.u) and cannot
+    represent a direct heat addition. Combustion heat release (and net
+    radiative gain/loss) is a direct volumetric energy source/sink, hence
+    the dedicated buffer.
+
+    Source is duck-typed, matching SeismicDNSBridge's convention:
+    q_dot is either a constant float [W/m^3] (rare -- HRR is normally
+    spatially localized), or any object exposing
+    ``.field(t) -> Tensor[(nx,ny,nz)]`` returning the volumetric heat
+    source at time t -- e.g. a fire_dns_coupling_one.FireSourceField
+    that shapes a design fire's HRR(t) into a plume-like spatial Gaussian
+    at the fire's location. This keeps one_core's only hard dependency as
+    torch, matching every other bridge in this file.
+
+    IMPORTANT: requires super_dns_one_v6_3.py v6.5+ (the _ext_q buffer
+    and its consumption in _compute_rhs). On an older solver, _ext_q will
+    simply not exist as an attribute; sync() checks for it explicitly and
+    raises a clear error rather than silently creating an unused
+    attribute that _compute_rhs never reads (the same failure mode Bug 11
+    -- _ext_nu_ch -- taught this ecosystem to guard against).
+
+    Usage::
+
+        bridge = HeatReleaseDNSBridge(dns_solver, q_dot=fire_source_field)
+        for step in range(n_steps):
+            bridge.sync()          # writes dns_solver._ext_q
+            dns_solver.step()
+    """
+
+    def __init__(self, dns_solver, q_dot=None) -> None:
+        if not hasattr(dns_solver, "_ext_q"):
+            raise RuntimeError(
+                "dns_solver has no _ext_q buffer -- this bridge requires "
+                "super_dns_one_v6_3.py v6.5+ (Bug-11-style fix: _ext_q "
+                "declared in __init__ AND consumed in _compute_rhs). "
+                "Writing to a nonexistent/unconsumed buffer would silently "
+                "produce a no-op simulation."
+            )
+        self.dns = dns_solver
+        self.q_dot = q_dot
+
+    def sync(self) -> None:
+        """
+        Call once per outer step, BEFORE dns_solver.step(). Overwrites
+        dns_solver._ext_q in place (not accumulate, matching every other
+        bridge's convention here).
+        """
+        if self.q_dot is None:
+            return
+        t = float(self.dns.time)
+        dev = self.dns.device
+        with torch.no_grad():
+            if isinstance(self.q_dot, (int, float)):
+                self.dns._ext_q = torch.full_like(self.dns._ext_q, float(self.q_dot)).to(dev)
+                return
+            field_fn = getattr(self.q_dot, "field", None)
+            if not callable(field_fn):
+                raise TypeError(
+                    "q_dot must be None, a number, or an object exposing "
+                    f".field(t) -> Tensor (got {type(self.q_dot).__name__})."
+                )
+            self.dns._ext_q = field_fn(t).to(dev)
 
 
 # =============================================================================
