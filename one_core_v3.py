@@ -1,7 +1,7 @@
 # =============================================================================
 # ONE CORE — Shared Foundation of the ONE Ecosystem
 # =============================================================================
-# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Developer : Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 # Year      : 2026
 # ORCID     : 0009-0008-2374-0788
@@ -82,6 +82,22 @@
 #             energy-rate source terms are different dimensional groups,
 #             so they cannot share combustion_nondim_scale even after a
 #             conversion is added). See that file's v6.7→v6.8 changelog.
+#   3.5.0  — PyrolysisDNSBridge gains target='wall' mode: writes DIRECTLY
+#             into a PyrolysisWallBC (super_dns_one_v6_3.py v6.9+) attached
+#             to a specific domain face, a genuine Stefan-flow blowing-
+#             wall surface boundary condition, replacing the v6.8/v3.4.0
+#             thin-near-wall-volume proxy for cases where the fuel
+#             surface aligns with a domain face (the common case: a fuel
+#             bed on the floor, a wall lining, etc.). target='volumetric'
+#             (v3.4.0 behaviour) remains available and unchanged for
+#             sources not aligned with a domain face. See that file's
+#             v6.8→v6.9 changelog for the wall-BC-side implementation,
+#             including a real pre-existing bug found and fixed along the
+#             way (self.bc_objects was referenced but never assigned,
+#             breaking ghost-cell filling for ANY non-periodic BC) and a
+#             second gap closed (Z/soot mixture-fraction fields had no
+#             wall-aware ghost-cell treatment at all before v6.9 -- hard
+#             zeros at any non-periodic boundary).
 #
 # =============================================================================
 
@@ -97,7 +113,7 @@ import torch.nn as nn
 
 logger = logging.getLogger(__name__)
 
-ONE_VERSION: str = "3.4.0"
+ONE_VERSION: str = "3.5.0"
 
 
 # =============================================================================
@@ -871,73 +887,139 @@ class HeatReleaseDNSBridge:
 
 class PyrolysisDNSBridge:
     """
-    Bridge: injects a genuine MASS source into the DNS solver's continuity
-    equation, for solid-fuel pyrolysis (fire_one.PyrolysisModel) or any
-    other real mass-injection process (fuel gasification, water-mist
-    evaporation, etc.).
+    Bridge: injects a genuine MASS source for solid-fuel pyrolysis
+    (fire_one.PyrolysisModel) or any other real mass-injection process
+    (fuel gasification, water-mist evaporation, etc.), in one of two
+    modes:
 
-    Physics
-    ───────
-    Writes FIVE buffers together (dns_solver.v6.8+): _ext_mdot (mass),
+    target='volumetric' (default, v6.8+): distributes mass through a
+        thin near-wall VOLUME via the five _ext_mdot* buffers -- a proxy,
+        not a true surface condition, but works with any solver grid/BC
+        setup and doesn't require a domain face to be configured as a
+        pyrolysis wall.
+
+    target='wall' (v6.9+, RECOMMENDED for an actual solid fuel surface):
+        writes DIRECTLY into a PyrolysisWallBC attached to a specific
+        domain face (dns_solver.bc_objects[wall_face]) -- mass genuinely
+        leaves the domain boundary via a Stefan-flow blowing-wall
+        condition, the physically correct representation, rather than a
+        distributed proxy. Requires that face to have been configured
+        with cfg.bc_<face> = 'pyrolysis_wall' when the solver was built.
+
+    Physics (volumetric mode)
+    ──────────────────────────
+    Writes FIVE buffers together (dns_solver v6.8+): _ext_mdot (mass),
     _ext_mdot_u/v/w (momentum carried by the injected mass at its
     injection velocity), _ext_mdot_e (energy carried by the injected
     mass), and _ext_mdot_Z (mixture-fraction flux -- pyrolyzate is pure
     fuel vapor, Z=1, so _ext_mdot_Z = _ext_mdot for a pyrolysis source).
-    This is the ONLY mechanism in this ecosystem that adds mass to the
-    gas phase at all -- continuity was, before v6.8, exactly closed
-    (conserved by the convective terms alone, no source term anywhere).
+
+    Physics (wall mode)
+    ────────────────────
+    Writes bc.mdot_field_nondim, bc.T_wall, bc.Z_inject on the target
+    PyrolysisWallBC, converting from the source's real (dimensional)
+    units via dns_solver.T_ref (temperature) and
+    dns_solver.mdot_nondim_scale (mass flux) -- the SAME two conversion
+    factors already established for the volumetric path and for
+    combustion/radiation in v6.6, kept consistent rather than
+    introducing a third, different scaling convention. Momentum in wall
+    mode is NOT independently prescribed (u_inject/v_inject/w_inject
+    keys are ignored in this mode) -- PyrolysisWallBC derives the
+    blowing velocity from mass conservation (v_blow = mdot/rho_wall)
+    rather than accepting a prescribed injection velocity, which is the
+    physically correct treatment for a solid surface (only the
+    NORMAL blowing velocity is meaningful; there is no independent
+    tangential injection velocity for gas leaving a solid).
 
     Source is duck-typed: `pyrolysis_source` is an object exposing
-    ``.field(t) -> dict`` with keys 'mdot' (kg/(m^3.s) volumetric mass
-    source Tensor), and optionally 'u_inject'/'v_inject'/'w_inject'
-    (injection velocity components, default 0 = mass added at rest --
-    physically means the injected gas is assumed to instantaneously
-    equilibrate to zero velocity, an approximation valid when injection
-    velocity is small relative to the surrounding flow), 'T_inject_K'
-    (default 300K -- used to derive the carried energy via
-    cp_gas*T_inject, matching the cp_gas convention already used for
-    combustion in this solver), and 'Z_inject' (default 1.0 -- pure fuel;
-    override for a source that isn't pure fuel vapor, e.g. water-mist
-    evaporation would use Z_inject=0 since water vapor isn't a
-    combustible mixture-fraction constituent in this solver's model).
+    ``.field(t) -> dict``. Volumetric mode reads 'mdot' (kg/(m^3.s)
+    Tensor) plus optional 'u_inject'/'v_inject'/'w_inject'/'T_inject_K'/
+    'Z_inject'. Wall mode reads 'mdot' as (kg/(m^2.s), a 2D Tensor
+    matching the target face's shape) plus optional 'T_inject_K'/
+    'Z_inject' (velocity keys ignored, see above).
 
-    IMPORTANT: requires super_dns_one_v6_3.py v6.8+ (the _ext_mdot* buffer
-    family). Raises clearly at construction otherwise, same pattern as
+    IMPORTANT: requires super_dns_one_v6_3.py v6.8+ (volumetric mode) or
+    v6.9+ (wall mode, needs PyrolysisWallBC + self.bc_objects). Raises
+    clearly at construction otherwise, same pattern as
     HeatReleaseDNSBridge's _ext_q check.
 
-    Usage::
+    Usage (wall mode, recommended for an actual fuel surface)::
 
-        bridge = PyrolysisDNSBridge(dns_solver, pyrolysis_source=my_source)
+        # cfg.bc_z_min = 'pyrolysis_wall'  (set before constructing dns_solver)
+        bridge = PyrolysisDNSBridge(dns_solver, pyrolysis_source=my_source,
+                                     target='wall', wall_face='zmin')
         for step in range(n_steps):
             bridge.sync()
             dns_solver.step()
     """
 
-    def __init__(self, dns_solver, pyrolysis_source=None) -> None:
-        required = ("_ext_mdot", "_ext_mdot_u", "_ext_mdot_v",
-                    "_ext_mdot_w", "_ext_mdot_e", "_ext_mdot_Z")
-        missing = [b for b in required if not hasattr(dns_solver, b)]
-        if missing:
-            raise RuntimeError(
-                f"dns_solver is missing buffer(s) {missing} -- this bridge "
-                "requires super_dns_one_v6_3.py v6.8+ (mass-source buffer "
-                "family added to continuity). Writing to a nonexistent/"
-                "unconsumed buffer would silently produce a no-op "
-                "simulation (the exact failure mode _ext_nu_ch taught "
-                "this ecosystem to guard against)."
-            )
+    def __init__(self, dns_solver, pyrolysis_source=None,
+                 target: str = "volumetric", wall_face: str = None) -> None:
+        if target not in ("volumetric", "wall"):
+            raise ValueError("target must be 'volumetric' or 'wall'")
+        self.target = target
         self.dns = dns_solver
         self.source = pyrolysis_source
         self.cp_gas = float(getattr(dns_solver, "cp_gas", 1400.0))
 
+        if target == "volumetric":
+            required = ("_ext_mdot", "_ext_mdot_u", "_ext_mdot_v",
+                        "_ext_mdot_w", "_ext_mdot_e", "_ext_mdot_Z")
+            missing = [b for b in required if not hasattr(dns_solver, b)]
+            if missing:
+                raise RuntimeError(
+                    f"dns_solver is missing buffer(s) {missing} -- this "
+                    "bridge (target='volumetric') requires "
+                    "super_dns_one_v6_3.py v6.8+ (mass-source buffer "
+                    "family added to continuity). Writing to a "
+                    "nonexistent/unconsumed buffer would silently produce "
+                    "a no-op simulation (the exact failure mode "
+                    "_ext_nu_ch taught this ecosystem to guard against)."
+                )
+        else:
+            if wall_face is None:
+                raise ValueError("wall_face is required when target='wall' "
+                                  "(e.g. 'zmin', 'xmax', ...)")
+            bc_objects = getattr(dns_solver, "bc_objects", None)
+            if bc_objects is None or wall_face not in bc_objects:
+                raise RuntimeError(
+                    f"dns_solver.bc_objects['{wall_face}'] not found -- "
+                    "this bridge (target='wall') requires "
+                    "super_dns_one_v6_3.py v6.9+ and cfg.bc_<face> = "
+                    "'pyrolysis_wall' to have been set for that face "
+                    "before the solver was constructed."
+                )
+            bc = bc_objects[wall_face]
+            if not hasattr(bc, "mdot_field_nondim"):
+                raise RuntimeError(
+                    f"dns_solver.bc_objects['{wall_face}'] is a "
+                    f"{type(bc).__name__}, not a PyrolysisWallBC -- set "
+                    f"cfg.bc_{wall_face.replace('min','_min').replace('max','_max')} "
+                    "= 'pyrolysis_wall' when constructing the solver."
+                )
+            if not hasattr(dns_solver, "T_ref") or not hasattr(dns_solver, "mdot_nondim_scale"):
+                raise RuntimeError(
+                    "dns_solver is missing T_ref/mdot_nondim_scale -- "
+                    "target='wall' requires super_dns_one_v6_3.py v6.9+."
+                )
+            self.wall_face = wall_face
+            self.bc = bc
+
     def sync(self) -> None:
         """
-        Call once per outer step, BEFORE dns_solver.step(). Overwrites all
-        five _ext_mdot* buffers together (not accumulate), so a partial
-        field dict (e.g. only 'mdot', no velocity keys) still produces a
-        fully self-consistent set of buffers each call -- missing keys
-        default to physically well-defined values (rest injection, T=300K,
-        pure fuel) rather than leaving stale values from a previous call.
+        Call once per outer step, BEFORE dns_solver.step().
+
+        Volumetric mode: overwrites all five _ext_mdot* buffers together
+        (not accumulate), so a partial field dict still produces a fully
+        self-consistent set of buffers each call -- missing keys default
+        to physically well-defined values (rest injection, T=300K, pure
+        fuel) rather than leaving stale values from a previous call.
+
+        Wall mode: overwrites bc.mdot_field_nondim/T_wall/Z_inject on the
+        target PyrolysisWallBC; source=None or a zero/absent 'mdot' sets
+        bc.mdot_field_nondim back to None, which makes PyrolysisWallBC
+        fall back to a plain NoSlipIsothermalWallBC for that step (no
+        stale injection persists once the source stops).
         """
         if self.source is None:
             return
@@ -949,21 +1031,30 @@ class PyrolysisDNSBridge:
             )
         t = float(self.dns.time)
         dev = self.dns.device
+
         with torch.no_grad():
             f = field_fn(t)
             mdot = f["mdot"].to(dev)
-            u_inj = f.get("u_inject", torch.zeros_like(mdot))
-            v_inj = f.get("v_inject", torch.zeros_like(mdot))
-            w_inj = f.get("w_inject", torch.zeros_like(mdot))
-            T_inj = f.get("T_inject_K", 300.0)
+            T_inj_K = f.get("T_inject_K", 300.0)
             Z_inj = f.get("Z_inject", 1.0)
 
-            self.dns._ext_mdot   = mdot
-            self.dns._ext_mdot_u = (mdot * u_inj).to(dev)
-            self.dns._ext_mdot_v = (mdot * v_inj).to(dev)
-            self.dns._ext_mdot_w = (mdot * w_inj).to(dev)
-            self.dns._ext_mdot_e = (mdot * self.cp_gas * T_inj).to(dev)
-            self.dns._ext_mdot_Z = (mdot * Z_inj).to(dev)
+            if self.target == "volumetric":
+                u_inj = f.get("u_inject", torch.zeros_like(mdot))
+                v_inj = f.get("v_inject", torch.zeros_like(mdot))
+                w_inj = f.get("w_inject", torch.zeros_like(mdot))
+                self.dns._ext_mdot   = mdot
+                self.dns._ext_mdot_u = (mdot * u_inj).to(dev)
+                self.dns._ext_mdot_v = (mdot * v_inj).to(dev)
+                self.dns._ext_mdot_w = (mdot * w_inj).to(dev)
+                self.dns._ext_mdot_e = (mdot * self.cp_gas * T_inj_K).to(dev)
+                self.dns._ext_mdot_Z = (mdot * Z_inj).to(dev)
+            else:
+                if float(mdot.abs().max()) < 1e-30:
+                    self.bc.mdot_field_nondim = None
+                    return
+                self.bc.mdot_field_nondim = (mdot * self.dns.mdot_nondim_scale).to(dev)
+                self.bc.T_wall = T_inj_K / self.dns.T_ref
+                self.bc.Z_inject = Z_inj
 
 
 # =============================================================================
