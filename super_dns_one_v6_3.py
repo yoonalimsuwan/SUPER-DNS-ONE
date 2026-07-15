@@ -1,7 +1,7 @@
 # =============================================================================
 # SUPER DNS ONE v6 — Native Full-Differentiable 3D Compressible DNS / LES
 # =============================================================================
-# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Author : Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
@@ -21,6 +21,68 @@
 #   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
+#
+# Changes v6.10 → v6.11:
+#   Tangential/normal momentum coupling fix + distributed-mode BC guard,
+#   requested explicitly after v6.10.
+#
+#     - Bug 17 fix: _apply_bc_to_boundary_cells had NO distributed-mode
+#       rank guard (unlike _fill_ghost_cells / _apply_wall_model, which
+#       both correctly skip z-axis physical-BC treatment on ranks that
+#       don't own that physical boundary). Under distributed z-splitting,
+#       EVERY rank was applying bc_z_min/bc_z_max to its own LOCAL z=0 /
+#       z=local_nz-1 slab edge -- including ranks whose z=0/z=local_nz-1
+#       is an internal, halo-exchanged inter-rank interface, not a
+#       physical domain boundary at all. This would have corrupted the
+#       halo interface for ANY non-periodic z configuration in
+#       distributed mode, for every wall BC in this file, not just
+#       PyrolysisWallBC. Also replaced the bare `except Exception: pass`
+#       in the same method (silently swallowing any BC failure) with a
+#       logged warning. Verified: rank-guard logic gives exactly one
+#       owning rank per physical z-boundary across a simulated 4-rank
+#       case, all middle ranks correctly skip both faces.
+#     - Bug 18 fix: PyrolysisWallBC.ghost_cells() previously delegated
+#       entirely to NoSlipIsothermalWallBC's ghost cells, which mirror
+#       ALL velocity components (including the NORMAL/blowing component)
+#       about ZERO -- inconsistent with apply()'s nonzero blowing
+#       velocity, decoupling the near-wall viscous/gradient stencil from
+#       the actual injection state. Now mirrors the NORMAL component
+#       about its actual (blowing) wall value and TANGENTIAL components
+#       about zero (still correctly no-slip), reading the boundary
+#       cell's own already-apply()-corrected state rather than
+#       recomputing from scratch.
+#     - Bug 19 fix (found while validating the above): NoSlipIsothermal
+#       WallBC.ghost_cells() -- which PyrolysisWallBC's mdot=None
+#       fallback depends on, and which WernerWengleWallModelBC also
+#       delegates to -- used `i = -g if side=='left' else nx-1+g` with
+#       nx,ny,nz taken from rho.shape, but is actually called (via
+#       _fill_ghost_cells) with the PADDED arrays, not the unpadded
+#       arrays apply() uses. For 'left' side this indexed the FAR-RIGHT
+#       end of the padded array (Python negative-index wraparound), not
+#       the actual near-left ghost region -- meaning every non-periodic
+#       wall's near-boundary ghost cells (read by every viscous stencil
+#       evaluated near that wall) were silently left at the zero
+#       _pad_field fills them with by default, while the array's far end
+#       was incorrectly overwritten with mirrored ghost-region data
+#       instead of true interior data. This is NOT specific to fire/
+#       pyrolysis and predates this feature entirely -- it affected
+#       every simulation using NoSlipIsothermalWallBC (or
+#       WernerWengleWallModelBC) with a non-periodic domain. Fixed using
+#       the correct padded-array layout (interior at [2,N-2), ghost at
+#       [0,2) and [N-2,N)); the underlying mirror FORMULA was already
+#       physically correct (this was purely an indexing bug), so the fix
+#       changes indices, not physics.
+#
+#   KNOWN, NOT YET FIXED IN THIS PASS: the exact same `-g`/`nx-1+g`
+#   indexing pattern (and therefore, almost certainly, the same bug) was
+#   found by inspection in SupersonicInflowBC.ghost_cells(),
+#   SubsonicOutflowBC.ghost_cells(), and MovingWallBC.ghost_cells().
+#   These were NOT fixed in this pass (scope was the pyrolysis-wall
+#   coupling specifically) but are flagged here explicitly rather than
+#   left for someone to rediscover independently -- any non-periodic
+#   simulation using inflow/outflow/moving-wall BCs likely has the same
+#   near-boundary ghost-cell defect as Bug 19 above, with the same fix
+#   pattern applicable.
 #
 # Changes v6.9 → v6.10:
 #   Momentum-flux (pressure-gradient) correction for strong blowing on
@@ -682,25 +744,63 @@ class NoSlipIsothermalWallBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
-        nx, ny, nz = rho.shape
-        if axis == 0:
-            for g in range(1, n_ghost+1):
-                i = -g if side=='left' else nx-1+g
-                ii = g if side=='left' else nx-1-g
-                rho[i]=rho[ii]; rhoE[i]=rhoE[ii]
-                rhou[i]=-rhou[ii]; rhov[i]=-rhov[ii]; rhow[i]=-rhow[ii]
-        elif axis == 1:
-            for g in range(1, n_ghost+1):
-                j = -g if side=='left' else ny-1+g
-                jj = g if side=='left' else ny-1-g
-                rho[:,j]=rho[:,jj]; rhoE[:,j]=rhoE[:,jj]
-                rhou[:,j]=-rhou[:,jj]; rhov[:,j]=-rhov[:,jj]; rhow[:,j]=-rhow[:,jj]
+        """
+        [v6.11] Bug 19 fix: this method used `i = -g if side=='left' else
+        nx-1+g` with nx,ny,nz taken from rho.shape -- but ghost_cells()
+        is actually called (see _fill_ghost_cells) with the PADDED
+        arrays (shape original_n+4), not the unpadded arrays apply()
+        works with (shape original_n). For 'left' side, i=-1,-2 indexes
+        the FAR-RIGHT end of a padded array (Python negative indexing),
+        not the actual near-left ghost region (padded indices 0,1).
+
+        Effect: every non-periodic wall's near-boundary ghost cells --
+        read by every viscous/gradient stencil evaluated near that wall
+        -- were silently left at zero (from _pad_field's zero-fill),
+        while the array's FAR end was incorrectly overwritten with
+        mirrored ghost-region data instead of true interior data. This
+        affected every simulation using this class (or
+        WernerWengleWallModelBC, which delegates to it) with a
+        non-periodic domain -- found while validating PyrolysisWallBC's
+        fallback path against this class, not introduced by that
+        feature, and not specific to it.
+
+        Fix: operates on the actual padded-array layout (interior at
+        [2, N-2), ghost at [0,2) and [N-2,N)), mirroring rho/rhoE/
+        velocity about the boundary cell's own (already Dirichlet-
+        correct, from apply()) value using a standard 2nd-order ghost
+        construction: ghost = 2*boundary - next_interior. For velocity
+        this reduces exactly to the ORIGINALLY INTENDED anti-symmetric
+        formula (ghost = -next_interior) since the wall velocity here is
+        identically zero -- i.e. this fix corrects the INDICES, not the
+        underlying physical formula, which was already right.
+        """
+        N = rho.shape[axis]
+
+        def _mirror(boundary_idx, next_interior_idx, ghost_near, ghost_far):
+            sl_b  = self._axis_slice3(axis, boundary_idx)
+            sl_ni = self._axis_slice3(axis, next_interior_idx)
+            rho_b, rhoE_b = rho[sl_b], rhoE[sl_b]
+            rho_ni, rhoE_ni = rho[sl_ni], rhoE[sl_ni]
+            rho_ghost  = 2 * rho_b  - rho_ni
+            rhoE_ghost = 2 * rhoE_b - rhoE_ni
+            for ghost_idx in (ghost_near, ghost_far):
+                sl_g = self._axis_slice3(axis, ghost_idx)
+                rho[sl_g]  = rho_ghost
+                rhoE[sl_g] = rhoE_ghost
+                rhou[sl_g] = -rhou[sl_ni]
+                rhov[sl_g] = -rhov[sl_ni]
+                rhow[sl_g] = -rhow[sl_ni]
+
+        if side == 'left':
+            _mirror(2, 3, 1, 0)
         else:
-            for g in range(1, n_ghost+1):
-                k = -g if side=='left' else nz-1+g
-                kk = g if side=='left' else nz-1-g
-                rho[:,:,k]=rho[:,:,kk]; rhoE[:,:,k]=rhoE[:,:,kk]
-                rhou[:,:,k]=-rhou[:,:,kk]; rhov[:,:,k]=-rhov[:,:,kk]; rhow[:,:,k]=-rhow[:,:,kk]
+            _mirror(N - 3, N - 4, N - 2, N - 1)
+
+    @staticmethod
+    def _axis_slice3(axis_idx, index):
+        sl = [slice(None), slice(None), slice(None)]
+        sl[axis_idx] = index
+        return tuple(sl)
 
 
 class WernerWengleWallModelBC(BoundaryCondition):
@@ -930,13 +1030,98 @@ class PyrolysisWallBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
-        # Same mirror/reflect treatment as NoSlipIsothermalWallBC for the
-        # ghost region beyond the wall -- the injection itself is fully
-        # captured by apply()'s boundary-CELL treatment above; ghost
-        # cells only need to support the stencil's one-sided differences
-        # near the wall, same role they play for every other wall BC here.
-        NoSlipIsothermalWallBC(self.T_wall, gamma if gamma is not None else self.gamma).ghost_cells(
-            rho, rhou, rhov, rhow, rhoE, axis, side, gamma, dx, n_ghost)
+        """
+        [v6.11] Bug 18 fix: previously delegated ENTIRELY to
+        NoSlipIsothermalWallBC.ghost_cells(), which mirrors ALL velocity
+        components (odd reflection about zero) -- including the NORMAL
+        component, which apply() had already set to a nonzero blowing
+        velocity v_blow. That mismatch meant the viscous/gradient
+        stencils reading these ghost cells (near-wall velocity
+        derivatives feeding shear-stress terms) saw a wall-normal
+        velocity that silently reverted to zero one cell beyond the
+        boundary, inconsistent with the actual blowing state.
+
+        This method's arguments are the PADDED arrays (shape
+        original_n+4 along `axis`, per _pad_field's convention: ghost
+        region = indices [0,2) on the left / [N-2,N) on the right,
+        interior = indices [2, N-2)) -- SAME convention as
+        _fill_scalar_ghost_cells, verified there against a hand-built
+        padded-array simulation before use.
+
+        Since apply() runs earlier in the same RK stage and already sets
+        the boundary CELL (padded index 2 for 'left' / N-3 for 'right')
+        to the correct momentum-flux-corrected wall state, ghost cells
+        are constructed by mirroring the boundary cell against the next
+        TRUE interior cell (padded index 3 for 'left' / N-4 for
+        'right') -- standard 2nd-order ghost-cell construction for a
+        cell-centered boundary condition:
+          ghost = 2 * boundary_cell - next_interior_cell
+
+        Applied per-field with normal/tangential decoupling:
+          - rho, rhoE: mirrored using the boundary cell's actual
+            (momentum-flux-corrected) value.
+          - NORMAL velocity component (matching `axis`): mirrored using
+            the boundary cell's actual (nonzero, blowing) value.
+          - TANGENTIAL velocity components: mirrored about ZERO (odd
+            reflection, i.e. ghost = -next_interior), unchanged from
+            plain no-slip -- a pyrolyzing solid surface still has no
+            tangential gas motion of its own.
+
+        Both ghost layers are set to the SAME mirrored value (matching
+        the same simplification already used and validated in
+        _fill_scalar_ghost_cells, rather than a separate higher-order
+        extrapolation for the second layer).
+
+        Falls back to NoSlipIsothermalWallBC's ghost cells unchanged when
+        mdot_field_nondim is None, matching apply()'s own fallback.
+        """
+        g = gamma if gamma is not None else self.gamma
+        if self.mdot_field_nondim is None:
+            return NoSlipIsothermalWallBC(self.T_wall, g).ghost_cells(
+                rho, rhou, rhov, rhow, rhoE, axis, side, gamma, dx, n_ghost)
+
+        N = rho.shape[axis]
+
+        def _mirror_pair(boundary_idx, next_interior_idx, ghost_idx_near, ghost_idx_far, axis_idx):
+            sl_b  = self._axis_slice(axis_idx, boundary_idx)
+            sl_ni = self._axis_slice(axis_idx, next_interior_idx)
+            sl_gn = self._axis_slice(axis_idx, ghost_idx_near)
+            sl_gf = self._axis_slice(axis_idx, ghost_idx_far)
+
+            rho_b, rhoE_b = rho[sl_b], rhoE[sl_b]
+            ru_b, rv_b, rw_b = rhou[sl_b], rhov[sl_b], rhow[sl_b]
+            rho_ni, rhoE_ni = rho[sl_ni], rhoE[sl_ni]
+            ru_ni, rv_ni, rw_ni = rhou[sl_ni], rhov[sl_ni], rhow[sl_ni]
+
+            rho_ghost  = 2 * rho_b  - rho_ni
+            rhoE_ghost = 2 * rhoE_b - rhoE_ni
+            for sl_g in (sl_gn, sl_gf):
+                rho[sl_g]  = rho_ghost
+                rhoE[sl_g] = rhoE_ghost
+                if axis_idx == 0:
+                    rhou[sl_g] = 2 * ru_b - ru_ni     # normal: mirror actual wall value
+                    rhov[sl_g] = -rv_ni                # tangential: odd reflection about 0
+                    rhow[sl_g] = -rw_ni
+                elif axis_idx == 1:
+                    rhov[sl_g] = 2 * rv_b - rv_ni
+                    rhou[sl_g] = -ru_ni
+                    rhow[sl_g] = -rw_ni
+                else:
+                    rhow[sl_g] = 2 * rw_b - rw_ni
+                    rhou[sl_g] = -ru_ni
+                    rhov[sl_g] = -rv_ni
+
+        if side == 'left':
+            _mirror_pair(2, 3, 1, 0, axis)
+        else:
+            _mirror_pair(N - 3, N - 4, N - 2, N - 1, axis)
+
+    @staticmethod
+    def _axis_slice(axis_idx, index):
+        """Builds a slice tuple selecting `index` along `axis_idx`, full range on the other two axes."""
+        sl = [slice(None), slice(None), slice(None)]
+        sl[axis_idx] = index
+        return tuple(sl)
 
 
 class FarFieldBC(BoundaryCondition):
@@ -2505,16 +2690,43 @@ class CompressibleSolver:
     # remaining definition above is now the one that executes.
 
     def _apply_bc_to_boundary_cells(self, rho, rhou, rhov, rhow, rhoE):
-        for bc, ax, side in [
-            (self.bc_x_min,0,'left'),(self.bc_x_max,0,'right'),
-            (self.bc_y_min,1,'left'),(self.bc_y_max,1,'right'),
-            (self.bc_z_min,2,'left'),(self.bc_z_max,2,'right'),
+        # Bug 17 fix (v6.11): this method had NO distributed-mode rank
+        # guard, unlike _fill_ghost_cells and _apply_wall_model (both of
+        # which correctly skip the z-axis physical-BC treatment on ranks
+        # that don't own that physical domain boundary). Found while
+        # addressing distributed/multi-rank support for PyrolysisWallBC,
+        # but this affected EVERY wall BC in this file under distributed
+        # z-splitting: every rank was applying its bc_z_min/bc_z_max
+        # object to its own LOCAL z=0 / z=local_nz-1 slab edge --
+        # including ranks whose z=0/z=local_nz-1 is actually an internal,
+        # halo-exchanged inter-rank interface, not the physical domain
+        # boundary at all. A NoSlipIsothermalWallBC (or any wall BC) on
+        # bc_z_min would have been incorrectly stamped onto every rank's
+        # local slab edge, corrupting the halo interface for any
+        # non-periodic z configuration in distributed mode.
+        #
+        # Also replaces the previous bare `except Exception: pass` (which
+        # silently swallowed ANY BC failure, including a real bug in a
+        # BC's apply() -- the same silent-failure class this ecosystem
+        # has repeatedly found costly elsewhere, e.g. Bug 11/_ext_nu_ch)
+        # with a logged warning, so a broken BC surfaces instead of
+        # silently no-op'ing.
+        for bc, ax, side, is_z in [
+            (self.bc_x_min,0,'left',False),(self.bc_x_max,0,'right',False),
+            (self.bc_y_min,1,'left',False),(self.bc_y_max,1,'right',False),
+            (self.bc_z_min,2,'left',True), (self.bc_z_max,2,'right',True),
         ]:
+            if self.distributed and is_z:
+                if side == 'left' and self.rank != 0:
+                    continue
+                if side == 'right' and self.rank != self.world_size - 1:
+                    continue
             if hasattr(bc, 'apply'):
                 try:
                     bc.apply(rho, rhou, rhov, rhow, rhoE, ax, side, self.gamma, self.dx)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"BC apply() failed for face axis={ax} side={side} "
+                                    f"({type(bc).__name__}): {e}")
 
     # ── Initial conditions ───────────────────────────────────────────────────
 
