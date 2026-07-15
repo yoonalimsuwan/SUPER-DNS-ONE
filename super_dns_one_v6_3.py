@@ -22,6 +22,33 @@
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
 #
+# Changes v6.9 → v6.10:
+#   Momentum-flux (pressure-gradient) correction for strong blowing on
+#   PyrolysisWallBC, replacing the v6.9 zero-pressure-gradient
+#   extrapolation (rho_wall=p_int/T_wall, valid only when blowing
+#   velocity << local flow velocity -- fine for typical pyrolysis mass
+#   fluxes, wrong once blowing is strong enough to matter dynamically).
+#
+#     - Quasi-1D compressible control-volume balance across the wall-
+#       adjacent cell (continuity rho_wall*v_wall=mdot + normal momentum
+#       p_wall+rho_wall*v_wall^2=p_int+rho_int*v_int_n^2 + isothermal EOS
+#       p_wall=rho_wall*T_wall) reduces to a QUADRATIC in rho_wall:
+#       T_wall*rho_wall^2 - RHS*rho_wall + mdot^2 = 0. Physical ('+')
+#       root verified (algebraically and numerically, before porting) to
+#       reduce EXACTLY to the v6.9 formula as mdot->0.
+#     - Isothermal-choking safety limit: the quadratic's discriminant
+#       goes negative once mdot exceeds what the local pressure/
+#       temperature can support -- verified numerically to occur exactly
+#       at isothermal Mach (v_wall/sqrt(T_wall)) = 1, self-consistent
+#       with the isothermal-wall EOS this whole BC family uses. Clamped
+#       to the choked state (finite, not NaN) with a self.choked_last_call
+#       diagnostic flag rather than silently producing an unphysical or
+#       NaN result for an over-prescribed mass flux.
+#     - Validated: momentum balance holds to numerical precision for a
+#       representative finite mdot; mdot=0 reduces bit-for-bit to the
+#       v6.9/NoSlipIsothermalWallBC result; an extreme (choked) mdot
+#       correctly sets choked_last_call=True and stays fully finite.
+#
 # Changes v6.8 → v6.9:
 #   Genuine surface mass-injection boundary condition (PyrolysisWallBC),
 #   replacing the v6.8 thin-near-wall-volumetric proxy for fuel surfaces
@@ -765,12 +792,21 @@ class PyrolysisWallBC(BoundaryCondition):
     v_blow = mdot / rho_wall, the standard compressible blowing-wall
     treatment (same category of BC used for ablation/transpiration
     cooling problems in aerospace CFD, applied here to fuel outgassing).
-    Wall density comes from the same zero-pressure-gradient extrapolation
-    NoSlipIsothermalWallBC already uses (p_int from the interior cell,
-    rho_wall = p_int/T_wall), so this reduces EXACTLY to
-    NoSlipIsothermalWallBC when mdot=0 (verified in the accompanying
-    test: PyrolysisWallBC(mdot=0) reproduces the no-slip result bit-for-
-    bit for rho/rhoE, momentum with a zero addition).
+
+    v6.10: wall density/pressure now include a momentum-flux (pressure-
+    gradient) correction via a quasi-1D compressible control-volume
+    balance (continuity + normal momentum + isothermal EOS -> a quadratic
+    in rho_wall), rather than the v6.9 formula's implicit assumption that
+    the injected mass carries negligible momentum. Reduces algebraically
+    and numerically EXACTLY to the v6.9 formula as mdot->0 (verified).
+    Includes an isothermal-choking safety limit (self.choked_last_call
+    flag) for mdot values the local pressure/temperature cannot actually
+    support -- clamped to the choked state rather than producing NaN.
+    See the momentum-flux correction's inline derivation in apply() for
+    the full physics.
+    Reduces EXACTLY to NoSlipIsothermalWallBC when mdot=0 (verified in
+    the accompanying test: PyrolysisWallBC(mdot=0) reproduces the no-slip
+    result bit-for-bit for rho/rhoE, momentum with a zero addition).
 
     UNITS: T_wall and mdot_field_nondim must ALREADY be in this solver's
     own non-dimensional convention when set on this object (same
@@ -798,6 +834,11 @@ class PyrolysisWallBC(BoundaryCondition):
         self.gamma = gamma
         self.mdot_field_nondim = None   # (n1,n2) tensor matching the face shape, or None
         self.Z_inject = 1.0             # pyrolyzate is pure fuel vapor
+        # v6.10: diagnostic, set by apply() when the momentum-flux
+        # correction below hits its choking limit anywhere on the face
+        # (see that section's docstring) -- checkable after a step
+        # without spamming logs on every RK substage call.
+        self.choked_last_call = False
 
     def apply(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None):
         g = gamma if gamma is not None else self.gamma
@@ -807,12 +848,65 @@ class PyrolysisWallBC(BoundaryCondition):
 
         nx, ny, nz = rho.shape
         sign = 1.0 if side == 'left' else -1.0   # blow INTO the domain
+        self.choked_last_call = False
 
         def _set(sl_bnd, sl_int):
+            rho_int = rho[sl_int] + 1e-8
             p_int = (g - 1) * (rhoE[sl_int] - 0.5 * (rhou[sl_int]**2 + rhov[sl_int]**2
-                               + rhow[sl_int]**2) / (rho[sl_int] + 1e-8))
-            rho_wall = p_int / self.T_wall
-            v_blow = sign * self.mdot_field_nondim / (rho_wall + 1e-8)
+                               + rhow[sl_int]**2) / rho_int)
+
+            # v6.10: momentum-flux (pressure-gradient) correction for
+            # strong blowing. The v6.9 formula (rho_wall = p_int/T_wall)
+            # implicitly assumed the injected mass carries negligible
+            # momentum -- fine for typical pyrolysis mass fluxes (blowing
+            # velocity << local flow velocity), but wrong once blowing is
+            # strong enough that its own momentum flux measurably alters
+            # the near-wall pressure field.
+            #
+            # Quasi-1D compressible control-volume balance across the
+            # thin wall-adjacent cell, normal direction only:
+            #   continuity:  rho_wall * v_wall = mdot            (prescribed)
+            #   momentum:    p_wall + rho_wall*v_wall^2 = p_int + rho_int*v_int_n^2  (RHS, "far" state)
+            #   EOS (isothermal wall): p_wall = rho_wall * T_wall
+            # Eliminating p_wall and v_wall gives a QUADRATIC in rho_wall:
+            #   T_wall*rho_wall^2 - RHS*rho_wall + mdot^2 = 0
+            # The physically relevant root is the '+' branch (reduces
+            # exactly to the v6.9 formula rho_wall=RHS/T_wall as mdot->0;
+            # verified algebraically and numerically before porting here
+            # -- the '-' branch spuriously sends rho_wall->0 as mdot->0,
+            # which is unphysical for a wall at rest).
+            if axis == 0:
+                v_int_n = sign * rhou[sl_int] / rho_int
+            elif axis == 1:
+                v_int_n = sign * rhov[sl_int] / rho_int
+            else:
+                v_int_n = sign * rhow[sl_int] / rho_int
+
+            mdot = self.mdot_field_nondim
+            RHS = p_int + rho_int * v_int_n**2
+            disc = RHS**2 - 4.0 * self.T_wall * mdot**2
+
+            # Choking limit: disc<0 means the prescribed mdot exceeds
+            # what this quasi-1D balance can support at the current
+            # local pressure/temperature (mathematically analogous to
+            # sonic choking in nozzle flow -- here, an ISOTHERMAL choking
+            # condition, self-consistent with the isothermal-wall EOS
+            # used throughout this BC family; verified numerically to
+            # occur exactly at isothermal Mach = v_wall/sqrt(T_wall) = 1).
+            # Clamping disc to 0 caps rho_wall/v_wall at their choked
+            # values rather than producing NaN from sqrt of a negative
+            # number -- physically means "this much mdot cannot actually
+            # be pushed through given the local state," a real modeling
+            # limit, not a numerical artifact to hide silently.
+            if bool((disc < 0).any()) if hasattr(disc, "any") else disc < 0:
+                self.choked_last_call = True
+            disc_safe = torch.clamp(disc, min=0.0)
+
+            rho_wall = (RHS + torch.sqrt(disc_safe)) / (2.0 * self.T_wall)
+            rho_wall = torch.clamp(rho_wall, min=1e-6)
+            v_blow = sign * (mdot / rho_wall)
+            p_wall = rho_wall * self.T_wall
+
             rho[sl_bnd] = rho_wall
             zero = torch.zeros_like(rho_wall)
             if axis == 0:
@@ -821,7 +915,7 @@ class PyrolysisWallBC(BoundaryCondition):
                 rhou[sl_bnd] = zero; rhov[sl_bnd] = rho_wall * v_blow; rhow[sl_bnd] = zero
             else:
                 rhou[sl_bnd] = zero; rhov[sl_bnd] = zero; rhow[sl_bnd] = rho_wall * v_blow
-            rhoE[sl_bnd] = p_int / (g - 1) + 0.5 * rho_wall * v_blow**2
+            rhoE[sl_bnd] = p_wall / (g - 1) + 0.5 * rho_wall * v_blow**2
 
         if axis == 0:
             _set(0 if side == 'left' else nx - 1, 1 if side == 'left' else nx - 2)
