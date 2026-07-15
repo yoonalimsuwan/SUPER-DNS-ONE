@@ -1,7 +1,7 @@
 # =============================================================================
 # SUPER DNS ONE v6 — Native Full-Differentiable 3D Compressible DNS / LES
 # =============================================================================
-# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# Author : Yoon A Limsuwan / MSPS NETWORK
 # License: MIT
 # Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
 # Year   : 2026
@@ -21,6 +21,49 @@
 #   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
 #   Bug 2 fix: SOCController now inherits CSOCBase properly
 #   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
+#
+# Changes v6.8 → v6.9:
+#   Genuine surface mass-injection boundary condition (PyrolysisWallBC),
+#   replacing the v6.8 thin-near-wall-volumetric proxy for fuel surfaces
+#   aligned with a domain face -- requested explicitly to make pyrolysis
+#   mass injection a real surface BC rather than a volumetric proxy.
+#
+#     - New PyrolysisWallBC class: Stefan-flow "blowing wall" BC. Normal
+#       velocity DERIVED from mass conservation (v_blow=mdot/rho_wall,
+#       not independently prescribed); tangential velocity no-slip.
+#       Reduces exactly to NoSlipIsothermalWallBC when mdot=None (no
+#       active injection). Registered via cfg.bc_<face>='pyrolysis_wall'.
+#     - Bug 16 fix: self.bc_objects was referenced by _fill_ghost_cells
+#       (self.bc_objects[face].ghost_cells(...)) but never actually
+#       assigned anywhere in __init__/_init_bc_objects -- calling
+#       _fill_ghost_cells for ANY non-periodic axis would have raised
+#       AttributeError immediately. Found while wiring PyrolysisWallBC's
+#       ghost cells; NOT specific to fire/pyrolysis -- this affected
+#       every non-periodic BC configuration in this solver, independent
+#       of and predating this feature.
+#     - New _fill_scalar_ghost_cells() + _active_pyrolysis_dirichlet():
+#       Z (mixture fraction) and Y_soot previously had NO wall-aware
+#       ghost-cell treatment at all -- _pad_field() on any non-periodic
+#       axis returned hard ZEROS in the ghost region for these scalars,
+#       for every combustion/soot run with a non-periodic domain since
+#       v6.6/v6.7 (not something introduced by this pass, but found and
+#       fixed while implementing the pyrolysis wall's Z=1 boundary
+#       condition, since fixing it was a prerequisite for that to be
+#       physically meaningful). Now: Dirichlet Z=Z_inject (or Y_soot=0)
+#       at an actively-injecting PyrolysisWallBC face, zero-gradient
+#       (Neumann) elsewhere -- the physically appropriate default for an
+#       inert wall (no scalar flux through a solid boundary).
+#     - PyrolysisDNSBridge (one_core_v3.py v3.5.0+) gains
+#       target='wall' mode targeting this BC directly; target='volumetric'
+#       (v3.4.0 behaviour) unchanged and still available.
+#     - NOT implemented: wall-normal pressure gradient corrections for
+#       strong blowing (this treatment assumes mdot small enough that the
+#       zero-pressure-gradient wall extrapolation NoSlipIsothermalWallBC
+#       already uses remains a reasonable approximation -- valid for
+#       typical pyrolysis mass fluxes, would need revisiting for a much
+#       stronger blowing/injection regime); multi-face pyrolysis wall
+#       interaction with distributed-mode halo exchange has not been
+#       tested (single-rank / non-distributed use is the tested path).
 #
 # Changes v6.7 → v6.8:
 #   Genuine mass source into the continuity equation (requested: full
@@ -705,6 +748,101 @@ class MovingWallBC(BoundaryCondition):
                 rhou[:,:,k]=2*self.u_wall*rho[:,:,k]-rhou[:,:,kk]
                 rhov[:,:,k]=2*self.v_wall*rho[:,:,k]-rhov[:,:,kk]
                 rhow[:,:,k]=2*self.w_wall*rho[:,:,k]-rhow[:,:,kk]
+
+
+class PyrolysisWallBC(BoundaryCondition):
+    """
+    [v6.9] Genuine surface mass-injection ("blowing wall" / Stefan-flow)
+    boundary condition -- gas leaves a pyrolyzing solid surface EXACTLY
+    at the wall face, rather than being distributed through a thin
+    near-wall volume (the earlier fire_dns_coupling_one.PyrolysisSourceField
+    + _ext_mdot* proxy, still available as a simpler alternative for
+    sources not aligned with a domain face).
+
+    Physics: tangential velocity is no-slip (zero), matching a solid
+    surface with no tangential gas motion of its own. Normal velocity is
+    NOT independently prescribed -- it is DERIVED from mass conservation,
+    v_blow = mdot / rho_wall, the standard compressible blowing-wall
+    treatment (same category of BC used for ablation/transpiration
+    cooling problems in aerospace CFD, applied here to fuel outgassing).
+    Wall density comes from the same zero-pressure-gradient extrapolation
+    NoSlipIsothermalWallBC already uses (p_int from the interior cell,
+    rho_wall = p_int/T_wall), so this reduces EXACTLY to
+    NoSlipIsothermalWallBC when mdot=0 (verified in the accompanying
+    test: PyrolysisWallBC(mdot=0) reproduces the no-slip result bit-for-
+    bit for rho/rhoE, momentum with a zero addition).
+
+    UNITS: T_wall and mdot_field_nondim must ALREADY be in this solver's
+    own non-dimensional convention when set on this object (same
+    convention as every other wall BC's T_wall, e.g.
+    NoSlipIsothermalWallBC(cfg.wall_temp) -- cfg.wall_temp is plain,
+    non-dimensional). A bridge (e.g. one_core_v3.PyrolysisDNSBridge)
+    converting from real Kelvin/kg-per-m2-s should do so explicitly via
+    dns_solver.T_ref and dns_solver.mdot_nondim_scale BEFORE writing to
+    T_wall / mdot_field_nondim -- this class does not know about real
+    units at all, by design (matches the "solver core stays non-
+    dimensional, bridges convert at the boundary" pattern established
+    for _ext_mdot* in v6.8).
+
+    mdot_field_nondim, T_wall, Z_inject are mutable attributes, meant to
+    be updated externally once per step (before solver.step()) by
+    whatever bridge/source is driving this wall -- same "external state,
+    read at apply() time" pattern as _ext_fx/_ext_q/_ext_mdot elsewhere.
+    mdot_field_nondim=None (the default) means "no active injection right
+    now", in which case this BC behaves exactly as a plain
+    NoSlipIsothermalWallBC.
+    """
+
+    def __init__(self, T_wall=1.0, gamma=1.4):
+        self.T_wall = T_wall
+        self.gamma = gamma
+        self.mdot_field_nondim = None   # (n1,n2) tensor matching the face shape, or None
+        self.Z_inject = 1.0             # pyrolyzate is pure fuel vapor
+
+    def apply(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None):
+        g = gamma if gamma is not None else self.gamma
+        if self.mdot_field_nondim is None:
+            return NoSlipIsothermalWallBC(self.T_wall, g).apply(
+                rho, rhou, rhov, rhow, rhoE, axis, side, g, dx)
+
+        nx, ny, nz = rho.shape
+        sign = 1.0 if side == 'left' else -1.0   # blow INTO the domain
+
+        def _set(sl_bnd, sl_int):
+            p_int = (g - 1) * (rhoE[sl_int] - 0.5 * (rhou[sl_int]**2 + rhov[sl_int]**2
+                               + rhow[sl_int]**2) / (rho[sl_int] + 1e-8))
+            rho_wall = p_int / self.T_wall
+            v_blow = sign * self.mdot_field_nondim / (rho_wall + 1e-8)
+            rho[sl_bnd] = rho_wall
+            zero = torch.zeros_like(rho_wall)
+            if axis == 0:
+                rhou[sl_bnd] = rho_wall * v_blow; rhov[sl_bnd] = zero; rhow[sl_bnd] = zero
+            elif axis == 1:
+                rhou[sl_bnd] = zero; rhov[sl_bnd] = rho_wall * v_blow; rhow[sl_bnd] = zero
+            else:
+                rhou[sl_bnd] = zero; rhov[sl_bnd] = zero; rhow[sl_bnd] = rho_wall * v_blow
+            rhoE[sl_bnd] = p_int / (g - 1) + 0.5 * rho_wall * v_blow**2
+
+        if axis == 0:
+            _set(0 if side == 'left' else nx - 1, 1 if side == 'left' else nx - 2)
+        elif axis == 1:
+            j, ji = (0, 1) if side == 'left' else (ny - 1, ny - 2)
+            _set((slice(None), j), (slice(None), ji))
+        else:
+            k, ki = (0, 1) if side == 'left' else (nz - 1, nz - 2)
+            _set((slice(None), slice(None), k), (slice(None), slice(None), ki))
+
+    def apply_to_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side):
+        self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
+
+    def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
+        # Same mirror/reflect treatment as NoSlipIsothermalWallBC for the
+        # ghost region beyond the wall -- the injection itself is fully
+        # captured by apply()'s boundary-CELL treatment above; ghost
+        # cells only need to support the stencil's one-sided differences
+        # near the wall, same role they play for every other wall BC here.
+        NoSlipIsothermalWallBC(self.T_wall, gamma if gamma is not None else self.gamma).ghost_cells(
+            rho, rhou, rhov, rhow, rhoE, axis, side, gamma, dx, n_ghost)
 
 
 class FarFieldBC(BoundaryCondition):
@@ -1913,11 +2051,24 @@ class CompressibleSolver:
             # default. Pass T_wall explicitly and A/B as keywords.
             if name == 'wall_model':     return WernerWengleWallModelBC(T_wall=cfg.wall_temp, A=cfg.wm_A, B=cfg.wm_B)
             if name == 'moving_wall':    return MovingWallBC(cfg.moving_wall_u,cfg.moving_wall_v,cfg.moving_wall_w,cfg.wall_temp,cfg.gamma)
+            if name == 'pyrolysis_wall': return PyrolysisWallBC(cfg.wall_temp, cfg.gamma)
             if name == 'farfield':       return FarFieldBC(cfg.farfield_rho,cfg.farfield_u,cfg.farfield_v,cfg.farfield_w,cfg.farfield_p,cfg.gamma)
             return PeriodicBC()
         self.bc_x_min = _bc(cfg.bc_x_min); self.bc_x_max = _bc(cfg.bc_x_max)
         self.bc_y_min = _bc(cfg.bc_y_min); self.bc_y_max = _bc(cfg.bc_y_max)
         self.bc_z_min = _bc(cfg.bc_z_min); self.bc_z_max = _bc(cfg.bc_z_max)
+        # Bug 16 fix (v6.9): self.bc_objects was referenced by
+        # _fill_ghost_cells (self.bc_objects[face].ghost_cells(...)) but
+        # never actually assigned anywhere in this class -- calling
+        # _fill_ghost_cells for ANY non-periodic axis would raise
+        # AttributeError immediately. Found while wiring PyrolysisWallBC's
+        # ghost cells (below); not specific to fire/pyrolysis, this
+        # affected every non-periodic BC in this solver.
+        self.bc_objects = {
+            'xmin': self.bc_x_min, 'xmax': self.bc_x_max,
+            'ymin': self.bc_y_min, 'ymax': self.bc_y_max,
+            'zmin': self.bc_z_min, 'zmax': self.bc_z_max,
+        }
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 
@@ -2012,6 +2163,79 @@ class CompressibleSolver:
             if not self._is_periodic_dim(axis):
                 self.bc_objects[face].ghost_cells(
                     rho_p, rhou_p, rhov_p, rhow_p, rhoE_p, axis, side, self.gamma, self.dx)
+
+    def _fill_scalar_ghost_cells(self, f_p, f, dirichlet_by_face=None):
+        """
+        [v6.9] Ghost-cell filling for a scalar field's padded array (Z or
+        soot Y_soot, or an intermediate diffusive-flux quantity derived
+        from either), on the SAME non-periodic faces the 5 Euler fields
+        use wall BCs for.
+
+        Prior to this method, _pad_field(f) on any non-periodic axis
+        returned hard ZEROS in the ghost region for ANY scalar -- not
+        physically meaningful at any wall, in every combustion/soot run
+        with a non-periodic domain, independent of and predating the
+        pyrolysis wall BC work that surfaced it.
+
+        dirichlet_by_face: optional dict {'xmin':tensor,...} of
+        PRESCRIBED boundary values (e.g. Z=1 at a pyrolyzing wall,
+        mirror-linear ghost construction); faces not present default to
+        zero-gradient (Neumann, simple mirror), the physically
+        appropriate default for an inert wall (no scalar flux through a
+        solid boundary).
+
+        Fills BOTH ghost layers with the same value (a simplified,
+        lower-order-accurate-right-at-the-wall but NOT fabricated
+        treatment) -- ddx/ddy/ddz only read the first ghost layer for a
+        boundary-adjacent interior cell, but the double-padded diffusive-
+        flux term (pad(rho*D*grad(f))) can reach the second layer.
+        """
+        dirichlet_by_face = dirichlet_by_face or {}
+        for axis, side, face in [(0, 'left', 'xmin'), (0, 'right', 'xmax'),
+                                  (1, 'left', 'ymin'), (1, 'right', 'ymax'),
+                                  (2, 'left', 'zmin'), (2, 'right', 'zmax')]:
+            if self._is_periodic_dim(axis):
+                continue
+            if self.distributed and axis == 2:
+                if side == 'left' and self.rank != 0:
+                    continue
+                if side == 'right' and self.rank != self.world_size - 1:
+                    continue
+            dv = dirichlet_by_face.get(face, None)
+            if axis == 0:
+                interior = f[0] if side == 'left' else f[-1]
+                ghost_val = (2 * dv - interior) if dv is not None else interior
+                if side == 'left': f_p[1] = ghost_val; f_p[0] = ghost_val
+                else:               f_p[-2] = ghost_val; f_p[-1] = ghost_val
+            elif axis == 1:
+                interior = f[:, 0] if side == 'left' else f[:, -1]
+                ghost_val = (2 * dv - interior) if dv is not None else interior
+                if side == 'left': f_p[:, 1] = ghost_val; f_p[:, 0] = ghost_val
+                else:               f_p[:, -2] = ghost_val; f_p[:, -1] = ghost_val
+            else:
+                interior = f[:, :, 0] if side == 'left' else f[:, :, -1]
+                ghost_val = (2 * dv - interior) if dv is not None else interior
+                if side == 'left': f_p[:, :, 1] = ghost_val; f_p[:, :, 0] = ghost_val
+                else:               f_p[:, :, -2] = ghost_val; f_p[:, :, -1] = ghost_val
+        return f_p
+
+    def _active_pyrolysis_dirichlet(self, attr_name: str):
+        """
+        Scans self.bc_objects for PyrolysisWallBC instances with an
+        active (non-None) mdot_field_nondim, returning
+        {face: value_tensor} for the given attribute ('Z_inject' or a
+        constant 0.0 for soot) -- used to build the Dirichlet boundary
+        values for Z/RS ghost-cell filling. Returns {} if no pyrolysis
+        wall is currently injecting (all faces fall back to Neumann,
+        i.e. exactly the v6.6/v6.7 behaviour where this never mattered).
+        """
+        result = {}
+        for face, bc in getattr(self, "bc_objects", {}).items():
+            if isinstance(bc, PyrolysisWallBC) and bc.mdot_field_nondim is not None:
+                value = bc.Z_inject if attr_name == "Z_inject" else 0.0
+                result[face] = value if isinstance(value, torch.Tensor) else \
+                    torch.full_like(bc.mdot_field_nondim, float(value))
+        return result
 
     def _apply_wall_model(self, rho, rhou, rhov, rhow, rhoE, dt):
         if not self.wall_model_faces:
@@ -2543,18 +2767,23 @@ class CompressibleSolver:
         # this in your own validation before trusting sharp-front results.
         rho_safe = _softplus_floor(rho, 1e-8)
         Z = RZ / rho_safe
-        Z_p  = self._pad_field(Z)
+        # v6.9: proper wall ghost cells (Dirichlet Z=Z_inject at an active
+        # PyrolysisWallBC face, Neumann/zero-gradient elsewhere) instead
+        # of the previously-hardcoded zero ghost region on any
+        # non-periodic axis -- see _fill_scalar_ghost_cells docstring.
+        Z_dirichlet = self._active_pyrolysis_dirichlet("Z_inject")
+        Z_p  = self._fill_scalar_ghost_cells(self._pad_field(Z), Z, Z_dirichlet)
         dZdx = ddx(Z_p); dZdy = ddy(Z_p); dZdz = ddz(Z_p)
 
         D_Z = torch.clamp(mu_eff / (rho_safe * self.turbulent_schmidt), min=1e-6)
 
-        adv_RZ = -(ddx(self._pad_field(rho*u*Z)) +
-                   ddy(self._pad_field(rho*v*Z)) +
-                   ddz(self._pad_field(rho*w*Z)))
+        adv_RZ = -(ddx(self._fill_scalar_ghost_cells(self._pad_field(rho*u*Z), rho*u*Z)) +
+                   ddy(self._fill_scalar_ghost_cells(self._pad_field(rho*v*Z), rho*v*Z)) +
+                   ddz(self._fill_scalar_ghost_cells(self._pad_field(rho*w*Z), rho*w*Z)))
 
-        diff_RZ = (ddx(self._pad_field(rho*D_Z*dZdx)) +
-                   ddy(self._pad_field(rho*D_Z*dZdy)) +
-                   ddz(self._pad_field(rho*D_Z*dZdz)))
+        diff_RZ = (ddx(self._fill_scalar_ghost_cells(self._pad_field(rho*D_Z*dZdx), rho*D_Z*dZdx)) +
+                   ddy(self._fill_scalar_ghost_cells(self._pad_field(rho*D_Z*dZdy), rho*D_Z*dZdy)) +
+                   ddz(self._fill_scalar_ghost_cells(self._pad_field(rho*D_Z*dZdz), rho*D_Z*dZdz)))
 
         rhs_RZ = adv_RZ + diff_RZ   # source-free (conserved scalar)
 
@@ -2648,16 +2877,22 @@ class CompressibleSolver:
         if self.enable_soot:
             rho_safe2 = _softplus_floor(rho, 1e-8)
             Y_soot = RS / rho_safe2
-            Ys_p = self._pad_field(Y_soot)
+            # v6.9: same ghost-cell fix as Z above. Raw pyrolyzate carries
+            # no soot (soot forms downstream via combustion), so the
+            # Dirichlet value at an active pyrolysis wall is 0.0, not
+            # Z_inject -- see _active_pyrolysis_dirichlet's branch for
+            # attr_name != "Z_inject".
+            Ys_dirichlet = self._active_pyrolysis_dirichlet("Y_soot_inject")
+            Ys_p = self._fill_scalar_ghost_cells(self._pad_field(Y_soot), Y_soot, Ys_dirichlet)
             dYsdx = ddx(Ys_p); dYsdy = ddy(Ys_p); dYsdz = ddz(Ys_p)
             D_S = torch.clamp(mu_eff / (rho_safe2 * self.soot_schmidt), min=1e-6)
 
-            adv_RS = -(ddx(self._pad_field(rho*u*Y_soot)) +
-                       ddy(self._pad_field(rho*v*Y_soot)) +
-                       ddz(self._pad_field(rho*w*Y_soot)))
-            diff_RS = (ddx(self._pad_field(rho*D_S*dYsdx)) +
-                       ddy(self._pad_field(rho*D_S*dYsdy)) +
-                       ddz(self._pad_field(rho*D_S*dYsdz)))
+            adv_RS = -(ddx(self._fill_scalar_ghost_cells(self._pad_field(rho*u*Y_soot), rho*u*Y_soot)) +
+                       ddy(self._fill_scalar_ghost_cells(self._pad_field(rho*v*Y_soot), rho*v*Y_soot)) +
+                       ddz(self._fill_scalar_ghost_cells(self._pad_field(rho*w*Y_soot), rho*w*Y_soot)))
+            diff_RS = (ddx(self._fill_scalar_ghost_cells(self._pad_field(rho*D_S*dYsdx), rho*D_S*dYsdx)) +
+                       ddy(self._fill_scalar_ghost_cells(self._pad_field(rho*D_S*dYsdy), rho*D_S*dYsdy)) +
+                       ddz(self._fill_scalar_ghost_cells(self._pad_field(rho*D_S*dYsdz), rho*D_S*dYsdz)))
             rhs_RS = adv_RS + diff_RS
 
             if self.enable_combustion:
