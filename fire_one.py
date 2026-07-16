@@ -1,6 +1,9 @@
 """
 FIRE ONE — Fire Dynamics Engineering Module for the ONE Ecosystem
 ====================================================================
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
 
 Fire engineering analysis, analogous in structure to seismic_one.py:
     1. DesignFireCurve       — t-squared HRR growth curves (NFPA-standard)
