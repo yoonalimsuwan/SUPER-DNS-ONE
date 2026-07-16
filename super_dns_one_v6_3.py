@@ -13,14 +13,40 @@
 #   Gemini   (Google)     — numerical scheme cross-validation
 #   DeepSeek              — supplementary code analysis
 #
-# Changes v6.0 → v6.1:
-#   • CahnHilliardDNSBridge imported from one_core
-#   • CompressibleSolver.__init__ initialises _ext_rho_ch, _ext_nu_ch,
-#     _ext_fx, _ext_fy, _ext_fz buffers for CH coupling
-#   • _compute_rhs blends CH density/viscosity and injects Korteweg body force
-#   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
-#   Bug 2 fix: SOCController now inherits CSOCBase properly
-#   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
+# Changes v6.11 → v6.12:
+#   Follow-up requested after v6.11: fixed the SAME `-g`/`nx-1+g`
+#   padded-array indexing defect (Bug 19 pattern) in the three other
+#   classes flagged-but-not-fixed in the v6.11 entry below --
+#   SupersonicInflowBC, SubsonicOutflowBC, and MovingWallBC -- plus
+#   FarFieldBC, which turned out to contain a byte-for-byte copy-pasted
+#   duplicate of SubsonicOutflowBC's buggy ghost_cells() (not previously
+#   noticed since it wasn't in the original inspection list).
+#
+#     - Bug 19b (SupersonicInflowBC): freestream Dirichlet value was
+#       already correct (constant, independent of any interior cell);
+#       only the ghost-cell indices needed correcting.
+#     - Bug 19c (SubsonicOutflowBC) / Bug 19d (FarFieldBC, identical
+#       duplicated code): zero-gradient (Neumann) copy from the correct
+#       padded-array boundary cell, indices corrected to match the real
+#       padded layout.
+#     - Bug 19e (MovingWallBC): indices corrected; ALSO caught and fixed
+#       a logic error introduced during the index fix itself (not
+#       present in the original buggy code) -- an early draft mirrored
+#       velocity against the boundary cell's own already-wall-consistent
+#       momentum instead of the TRUE next interior cell, which would
+#       have collapsed the mirror formula to a constant
+#       (2*u_wall*rho_b - u_wall*rho_b = u_wall*rho_b for every ghost
+#       cell, destroying the gradient information the mirror exists to
+#       preserve). Caught by re-deriving and testing the expected value
+#       against a hand-built padded-array simulation before finalizing,
+#       same validation discipline applied throughout this file's fixes.
+#
+#   Validated (numpy padded-array simulation, matching _pad_field's
+#   exact construction): SupersonicInflowBC fills both near-boundary
+#   ghost layers with the exact freestream state; SubsonicOutflowBC
+#   correctly copies the zero-gradient boundary value; MovingWallBC's
+#   velocity mirror verified against the TRUE interior cell (not the
+#   degenerate constant-collapse value) to floating-point precision.
 #
 # Changes v6.10 → v6.11:
 #   Tangential/normal momentum coupling fix + distributed-mode BC guard,
@@ -73,17 +99,6 @@
 #       physically correct (this was purely an indexing bug), so the fix
 #       changes indices, not physics.
 #
-#   KNOWN, NOT YET FIXED IN THIS PASS: the exact same `-g`/`nx-1+g`
-#   indexing pattern (and therefore, almost certainly, the same bug) was
-#   found by inspection in SupersonicInflowBC.ghost_cells(),
-#   SubsonicOutflowBC.ghost_cells(), and MovingWallBC.ghost_cells().
-#   These were NOT fixed in this pass (scope was the pyrolysis-wall
-#   coupling specifically) but are flagged here explicitly rather than
-#   left for someone to rediscover independently -- any non-periodic
-#   simulation using inflow/outflow/moving-wall BCs likely has the same
-#   near-boundary ghost-cell defect as Bug 19 above, with the same fix
-#   pattern applicable.
-#
 # Changes v6.9 → v6.10:
 #   Momentum-flux (pressure-gradient) correction for strong blowing on
 #   PyrolysisWallBC, replacing the v6.9 zero-pressure-gradient
@@ -110,6 +125,15 @@
 #       representative finite mdot; mdot=0 reduces bit-for-bit to the
 #       v6.9/NoSlipIsothermalWallBC result; an extreme (choked) mdot
 #       correctly sets choked_last_call=True and stays fully finite.
+#
+# Changes v6.0 → v6.1:
+#   • CahnHilliardDNSBridge imported from one_core
+#   • CompressibleSolver.__init__ initialises _ext_rho_ch, _ext_nu_ch,
+#     _ext_fx, _ext_fy, _ext_fz buffers for CH coupling
+#   • _compute_rhs blends CH density/viscosity and injects Korteweg body force
+#   Bug 1 fix: ssc._prev → ssc.prev_sigma (correct buffer name)
+#   Bug 2 fix: SOCController now inherits CSOCBase properly
+#   Bug 3 fix: LangevinDNSBridge imported; _ext_sigma coupling in SOCController
 #
 # Changes v6.8 → v6.9:
 #   Genuine surface mass-injection boundary condition (PyrolysisWallBC),
@@ -640,28 +664,30 @@ class SupersonicInflowBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
+        """
+        [v6.11] Bug 19b fix: same indexing defect as Bug 19
+        (NoSlipIsothermalWallBC.ghost_cells) -- `i = -g` for 'left' wraps
+        to the padded array's far end instead of the actual near-left
+        ghost region. Here the assigned VALUE was already correct
+        (self.rho_inf etc, a constant freestream state independent of
+        any interior cell), so only the ghost-cell INDICES needed
+        correcting to the real padded-array ghost layout (left: indices
+        0,1; right: indices N-2,N-1).
+        """
         g = gamma if gamma is not None else self.gamma
-        nx, ny, nz = rho.shape
+        N = rho.shape[axis]
         E_inf = self.p_inf/(g-1) + 0.5*self.rho_inf*(self.u_inf**2+self.v_inf**2+self.w_inf**2)
-        if axis == 0:
-            rng = range(1, n_ghost+1)
-            idxs = [(-g, 0) if side=='left' else (nx-1+g, nx-1) for g in rng]
-            for i, _ in idxs:
-                rho[i] = self.rho_inf;   rhou[i] = self.rho_inf*self.u_inf
-                rhov[i] = self.rho_inf*self.v_inf; rhow[i] = self.rho_inf*self.w_inf
-                rhoE[i] = self.rho_inf*E_inf
-        elif axis == 1:
-            for g in range(1, n_ghost+1):
-                j = -g if side=='left' else ny-1+g
-                rho[:,j] = self.rho_inf;   rhou[:,j] = self.rho_inf*self.u_inf
-                rhov[:,j] = self.rho_inf*self.v_inf; rhow[:,j] = self.rho_inf*self.w_inf
-                rhoE[:,j] = self.rho_inf*E_inf
-        else:
-            for g in range(1, n_ghost+1):
-                k = -g if side=='left' else nz-1+g
-                rho[:,:,k] = self.rho_inf;   rhou[:,:,k] = self.rho_inf*self.u_inf
-                rhov[:,:,k] = self.rho_inf*self.v_inf; rhow[:,:,k] = self.rho_inf*self.w_inf
-                rhoE[:,:,k] = self.rho_inf*E_inf
+        ghost_idxs = (0, 1) if side == 'left' else (N-2, N-1)
+
+        def _fill(sl):
+            rho[sl] = self.rho_inf;   rhou[sl] = self.rho_inf*self.u_inf
+            rhov[sl] = self.rho_inf*self.v_inf; rhow[sl] = self.rho_inf*self.w_inf
+            rhoE[sl] = self.rho_inf*E_inf
+
+        for idx in ghost_idxs:
+            if axis == 0:   _fill(idx)
+            elif axis == 1: _fill((slice(None), idx))
+            else:           _fill((slice(None), slice(None), idx))
 
 
 class SubsonicOutflowBC(BoundaryCondition):
@@ -695,25 +721,37 @@ class SubsonicOutflowBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
-        nx, ny, nz = rho.shape
-        if axis == 0:
-            b = nx-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[idx]=rho[b]; rhou[idx]=rhou[b]; rhov[idx]=rhov[b]
-                rhow[idx]=rhow[b]; rhoE[idx]=rhoE[b]
-        elif axis == 1:
-            b = ny-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[:,idx]=rho[:,b]; rhou[:,idx]=rhou[:,b]; rhov[:,idx]=rhov[:,b]
-                rhow[:,idx]=rhow[:,b]; rhoE[:,idx]=rhoE[:,b]
-        else:
-            b = nz-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[:,:,idx]=rho[:,:,b]; rhou[:,:,idx]=rhou[:,:,b]
-                rhov[:,:,idx]=rhov[:,:,b]; rhow[:,:,idx]=rhow[:,:,b]; rhoE[:,:,idx]=rhoE[:,:,b]
+        """
+        [v6.11] Bug 19c fix: same indexing defect as Bug 19
+        (NoSlipIsothermalWallBC.ghost_cells) -- `idx = b-g` for 'left'
+        (with b=0) produced negative indices that wrap to the padded
+        array's far end, and the reference cell `b` itself used the
+        UNPADDED convention (b=0/nx-1) even though this method is called
+        with padded arrays (see _fill_ghost_cells) -- doubly wrong for a
+        padded array, where the actual boundary/interior cell is at
+        index 2 (left) or N-3 (right), not 0/N-1.
+
+        Fix: zero-gradient (Neumann) copy from the correct padded-array
+        boundary cell (already set by apply()'s own zero-gradient
+        extrapolation / characteristic update) into the correct ghost
+        indices (left: 0,1; right: N-2,N-1) -- matches the ORIGINALLY
+        INTENDED formula (a simple copy), just with corrected indices.
+        """
+        N = rho.shape[axis]
+        b = 2 if side == 'left' else N - 3
+        ghost_idxs = (0, 1) if side == 'left' else (N - 2, N - 1)
+
+        def _sl(idx):
+            if axis == 0:   return idx
+            elif axis == 1: return (slice(None), idx)
+            else:           return (slice(None), slice(None), idx)
+
+        sl_b = _sl(b)
+        rho_b, rhou_b, rhov_b, rhow_b, rhoE_b = rho[sl_b], rhou[sl_b], rhov[sl_b], rhow[sl_b], rhoE[sl_b]
+        for idx in ghost_idxs:
+            sl_g = _sl(idx)
+            rho[sl_g]=rho_b; rhou[sl_g]=rhou_b; rhov[sl_g]=rhov_b
+            rhow[sl_g]=rhow_b; rhoE[sl_g]=rhoE_b
 
 
 class NoSlipIsothermalWallBC(BoundaryCondition):
@@ -850,31 +888,49 @@ class MovingWallBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
-        nx, ny, nz = rho.shape
-        if axis == 0:
-            for g in range(1, n_ghost+1):
-                i = -g if side=='left' else nx-1+g
-                ii = g if side=='left' else nx-1-g
-                rho[i]=rho[ii]; rhoE[i]=rhoE[ii]
-                rhou[i]=2*self.u_wall*rho[i]-rhou[ii]
-                rhov[i]=2*self.v_wall*rho[i]-rhov[ii]
-                rhow[i]=2*self.w_wall*rho[i]-rhow[ii]
-        elif axis == 1:
-            for g in range(1, n_ghost+1):
-                j = -g if side=='left' else ny-1+g
-                jj = g if side=='left' else ny-1-g
-                rho[:,j]=rho[:,jj]; rhoE[:,j]=rhoE[:,jj]
-                rhou[:,j]=2*self.u_wall*rho[:,j]-rhou[:,jj]
-                rhov[:,j]=2*self.v_wall*rho[:,j]-rhov[:,jj]
-                rhow[:,j]=2*self.w_wall*rho[:,j]-rhow[:,jj]
-        else:
-            for g in range(1, n_ghost+1):
-                k = -g if side=='left' else nz-1+g
-                kk = g if side=='left' else nz-1-g
-                rho[:,:,k]=rho[:,:,kk]; rhoE[:,:,k]=rhoE[:,:,kk]
-                rhou[:,:,k]=2*self.u_wall*rho[:,:,k]-rhou[:,:,kk]
-                rhov[:,:,k]=2*self.v_wall*rho[:,:,k]-rhov[:,:,kk]
-                rhow[:,:,k]=2*self.w_wall*rho[:,:,k]-rhow[:,:,kk]
+        """
+        [v6.11] Bug 19e fix: same indexing defect as Bug 19
+        (NoSlipIsothermalWallBC.ghost_cells) -- `i = -g if side=='left'
+        else nx-1+g` wraps to the padded array's far end for 'left',
+        and the reference cell used the unpadded convention even though
+        this method is called with padded arrays. The underlying
+        MIRROR FORMULA for velocity (2*wall_velocity*rho - v_interior,
+        mirror about the prescribed moving-wall velocity, not zero) was
+        already correct in form; only the indices needed fixing --
+        analogous to Bug 18's fix for PyrolysisWallBC's normal
+        component.
+
+        IMPORTANT (caught during self-review, not present in the
+        original code): the mirror's "interior" reference MUST be the
+        TRUE next interior cell (one past the boundary), not the
+        boundary cell's own value -- the boundary cell has already been
+        set by apply() to the wall-consistent state itself, so mirroring
+        against it instead of a real interior value would collapse the
+        formula to a constant (2*u_wall*rho_b - u_wall*rho_b = u_wall*rho_b
+        for every ghost cell), destroying the gradient information the
+        mirror is meant to preserve.
+        """
+        N = rho.shape[axis]
+        b  = 2 if side == 'left' else N - 3       # boundary cell (already apply()-set)
+        ni = 3 if side == 'left' else N - 4        # TRUE next interior cell
+        ghost_idxs = (0, 1) if side == 'left' else (N - 2, N - 1)
+
+        def _sl(idx):
+            if axis == 0:   return idx
+            elif axis == 1: return (slice(None), idx)
+            else:           return (slice(None), slice(None), idx)
+
+        sl_b, sl_ni = _sl(b), _sl(ni)
+        rho_b, rhoE_b = rho[sl_b], rhoE[sl_b]
+        rhou_ni, rhov_ni, rhow_ni = rhou[sl_ni], rhov[sl_ni], rhow[sl_ni]
+        rhoE_ni = rhoE[sl_ni]
+        for idx in ghost_idxs:
+            sl_g = _sl(idx)
+            rho[sl_g]  = rho_b                      # zero-gradient copy for density
+            rhoE[sl_g] = rhoE_ni                     # zero-gradient copy (matches original intent)
+            rhou[sl_g] = 2*self.u_wall*rho_b - rhou_ni
+            rhov[sl_g] = 2*self.v_wall*rho_b - rhov_ni
+            rhow[sl_g] = 2*self.w_wall*rho_b - rhow_ni
 
 
 class PyrolysisWallBC(BoundaryCondition):
@@ -1179,25 +1235,27 @@ class FarFieldBC(BoundaryCondition):
         self.apply(rho, rhou, rhov, rhow, rhoE, axis, side)
 
     def ghost_cells(self, rho, rhou, rhov, rhow, rhoE, axis, side, gamma=None, dx=None, n_ghost=2):
-        nx, ny, nz = rho.shape
-        if axis == 0:
-            b = nx-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[idx]=rho[b]; rhou[idx]=rhou[b]; rhov[idx]=rhov[b]
-                rhow[idx]=rhow[b]; rhoE[idx]=rhoE[b]
-        elif axis == 1:
-            b = ny-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[:,idx]=rho[:,b]; rhou[:,idx]=rhou[:,b]; rhov[:,idx]=rhov[:,b]
-                rhow[:,idx]=rhow[:,b]; rhoE[:,idx]=rhoE[:,b]
-        else:
-            b = nz-1 if side=='right' else 0
-            for g in range(1, n_ghost+1):
-                idx = b+g if side=='right' else b-g
-                rho[:,:,idx]=rho[:,:,b]; rhou[:,:,idx]=rhou[:,:,b]
-                rhov[:,:,idx]=rhov[:,:,b]; rhow[:,:,idx]=rhow[:,:,b]; rhoE[:,:,idx]=rhoE[:,:,b]
+        """
+        [v6.11] Bug 19d fix: identical indexing defect to Bug 19c
+        (SubsonicOutflowBC.ghost_cells -- this class had the exact same
+        ghost_cells() body, apparently copy-pasted). See that fix's
+        docstring for the full explanation; same correction applied here.
+        """
+        N = rho.shape[axis]
+        b = 2 if side == 'left' else N - 3
+        ghost_idxs = (0, 1) if side == 'left' else (N - 2, N - 1)
+
+        def _sl(idx):
+            if axis == 0:   return idx
+            elif axis == 1: return (slice(None), idx)
+            else:           return (slice(None), slice(None), idx)
+
+        sl_b = _sl(b)
+        rho_b, rhou_b, rhov_b, rhow_b, rhoE_b = rho[sl_b], rhou[sl_b], rhov[sl_b], rhow[sl_b], rhoE[sl_b]
+        for idx in ghost_idxs:
+            sl_g = _sl(idx)
+            rho[sl_g]=rho_b; rhou[sl_g]=rhou_b; rhov[sl_g]=rhov_b
+            rhow[sl_g]=rhow_b; rhoE[sl_g]=rhoE_b
 
 
 # =============================================================================
