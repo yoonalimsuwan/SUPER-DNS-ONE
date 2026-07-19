@@ -1,6 +1,11 @@
 """
 FLOOD ONE — Flood Hydrology & Hydraulics Engineering Module for the ONE Ecosystem
 =====================================================================================
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
+
+
 
 Flood hazard analysis, structured like fire_one.py / seismic_one.py / volcano_one.py:
     1. RainfallModel           — design storm intensity-duration-frequency (IDF)
