@@ -6,6 +6,11 @@ qualitative trends -- NOT precise agreement with specific published
 numbers (several constants are explicitly flagged in the module as
 needing literature verification before quantitative use).
 """
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
+
+
 import numpy as np
 from volcano_one import (
     MagmaRheology, COMMON_MAGMAS, ConduitFlowModel, FragmentationModel,
