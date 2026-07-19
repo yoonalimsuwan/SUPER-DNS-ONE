@@ -1,6 +1,9 @@
 """
 VOLCANO ONE — Volcanic Eruption Engineering Module for the ONE Ecosystem
 ============================================================================
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
 
 Volcanic hazard analysis, structured like fire_one.py / seismic_one.py:
     1. MagmaRheology              — melt viscosity (VFT), crystal-content correction
