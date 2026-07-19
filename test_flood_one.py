@@ -1,3 +1,7 @@
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
+
 import numpy as np
 from flood_one import (
     RainfallModel, WatershedHydrology, ChannelHydraulics, FloodRouting,
