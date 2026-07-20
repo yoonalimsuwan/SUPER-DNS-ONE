@@ -1,6 +1,9 @@
 """
 STORM ONE — Severe Storm, Tornado & Tropical Cyclone Engineering Module
 ============================================================================
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
 
 Severe weather hazard analysis, structured like fire_one.py / seismic_one.py
 / volcano_one.py / flood_one.py:
