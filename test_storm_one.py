@@ -1,3 +1,7 @@
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
+
 import numpy as np
 import math
 from storm_one import (
@@ -5,6 +9,7 @@ from storm_one import (
     TropicalCycloneModel, StormSurgeModel, StormDamageAssessment, StormOne,
     coriolis_parameter, saturation_vapor_pressure,
 )
+
 
 print("=" * 70)
 print("TEST 1: Coriolis parameter & saturation vapor pressure sanity")
