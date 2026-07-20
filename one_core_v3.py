@@ -1,7 +1,7 @@
 # =============================================================================
 # ONE CORE — Shared Foundation of the ONE Ecosystem
 # =============================================================================
-# Developer : Yoon A Limsuwan / MSPS NETWORK
+# Developer : PAI , Yoon A Limsuwan / MSPS NETWORK
 # License   : MIT
 # Year      : 2026
 # ORCID     : 0009-0008-2374-0788
