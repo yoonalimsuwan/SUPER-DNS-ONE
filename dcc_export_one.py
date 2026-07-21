@@ -1,6 +1,9 @@
 """
 DCC EXPORT ONE — Digital Content Creation / CAD / Game Engine Export Bridge
 ================================================================================
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
 
 Exports ONE Ecosystem simulation results (seismic, fire, flood, storm,
 volcano, and raw DNS field data) into standard interchange formats
