@@ -2,6 +2,10 @@
 SIMULATION EXPORT BRIDGE ONE — Wires every ONE Ecosystem module's outputs
 into dcc_export_one.py's format writers.
 ================================================================================
+# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# License: MIT
+# Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
+# Year   : 2026
 
 Two sections:
 
