@@ -69,33 +69,20 @@ Structural Calculus seamlessly couples four crucial 3D structural models:
 
 ---
 
-## 🛠️ Repository Structure
 
-```text
-├── docs/
-│   ├── structural_calculus_part1.pdf   # Part I: Analytic Foundations (Ch. 1–8)
-│   └── structural_calculus_part2.pdf   # Part II: Advanced Structures (Ch. 9–19)
-├── src/
-│   ├── operators/                      # Structural Differential & Integral Operators
-│   ├── interfaces/                     # Self-Envelope & Brownian Interface Engines
-│   └── physics/                        # Nuclear Quenching & Neutronics Solvers
-├── examples/
-│   ├── chain_reaction_shutdown.py      # Simulation of reaction termination
-│   └── non_smooth_interface_3d.py      # 3D interface disorder visualization
-└── README.md
 
 📖 Citation
 If you use Structural Calculus or its underlying operator framework in your research, please cite the foundational papers:
-@article{limsuwan2026structural1,
+@article{PAI , limsuwan2026structural1,
   title={Structural Calculus: Part I -- Analytic Foundations},
-  author={Limsuwan, Joanna Yoon A Catherine},
+  author={PAI , Limsuwan, Joanna Yoon A Catherine},
   journal={Open Science Framework / Zenodo},
   year={2026}
 }
 
 @article{limsuwan2026structural2,
   title={Structural Calculus: Part II -- Advanced Structures and Applications},
-  author={Limsuwan, Joanna Yoon A Catherine},
+  author={PAI , Limsuwan, Joanna Yoon A Catherine},
   journal={Open Science Framework / Zenodo},
   year={2026}
 }
