@@ -39,7 +39,7 @@ SUPER DNS ONE/
 ├── structuralfluctuatinghydro_v6_3.py # Continuum Fluctuating Hydrodynamics
 ├── structural_cahn_hilliard_3d_v3.py  # Phase-field & interface dynamics
 ├── super_dns_one_v6_3.py             # Compressible DNS / LES solver
-└── structural_fno_3d_v2_1.py            # AI surrogate (Fourier Neural Operator)
+└── structural_fno_3d_v2_4.py            # AI surrogate (Fourier Neural Operator)
 ```
 
 ---
@@ -522,7 +522,7 @@ Output (B, 1, Nx, Ny, Nz) × 2        mean, log_var
 #### Usage
 
 ```python
-from structural_fno_3d_v2_1 import (
+from structural_fno_3d_v2_4 import (
     StructuralFNO3D, TrainerConfig,
     StructuralFNOTrainer, SuperDNSDataset, PhysicsLoss,
 )
@@ -602,7 +602,7 @@ The full coupling graph between all six modules:
                                    │
                                    ▼
                  ┌─────────────────────────────────────┐
-                 │       Structural FNO 3D v2.1         │
+                 │       Structural FNO 3D v2.4         │
                  │  StructuralFNO3D · PhysicsLoss       │
                  │  SuperDNSDataset · StructuralFNOTrainer │
                  └─────────────────────────────────────┘
@@ -659,7 +659,7 @@ python structural_langevin_v3.py
 python structuralfluctuatinghydro_v6_3.py
 python structural_cahn_hilliard_3d_v3.py
 python super_dns_one_v6_3.py
-python structural_fno_3d_v2_1.py
+python structural_fno_3d_v2_4.py
 ```
 
 All verification suites print `[PASS]` / `[FAIL]` for each test case and exit with code `0` on success.
@@ -701,7 +701,7 @@ for step in range(1000):
 ### Train FNO surrogate on DNS snapshots
 
 ```python
-from structural_fno_3d_v2_1 import (
+from structural_fno_3d_v2_4 import (
     StructuralFNO3D, TrainerConfig, StructuralFNOTrainer, SuperDNSDataset
 )
 
@@ -740,7 +740,7 @@ The entire cluster is grounded in a four-paper series on **Structural Calculus**
 | `structuralfluctuatinghydro_v6.py` | 6.1 | CH↔FH bridge + full differentiability (9 fixes) |
 | `structural_cahn_hilliard_3d.py` | v2 | GPU Conv3d/FFT Laplacian, ThinFilm, PFC, CH↔DNS bridge |
 | `super_dns_one_v6.py` | 6.1 | CH↔DNS bridge + full differentiability (8 fixes) |
-| `structural_fno_3d_v2_1.py` | 2.1.0 | MultiScale FFT, FiLM, CrossAttention, MC-Dropout, PhysicsLoss |
+| `structural_fno_3d_v2_4.py` | 2.1.0 | MultiScale FFT, FiLM, CrossAttention, MC-Dropout, PhysicsLoss |
 
 ---
 
@@ -774,7 +774,7 @@ All six modules in the SUPER DNS ONE cluster were developed with the assistance 
 All modules in the SUPER DNS ONE cluster are released under the **MIT License**.
 
 ```
-Copyright (c) 2026 Yoon A Limsuwan / MSPS NETWORK
+Copyright (c) 2026 PAI , Yoon A Limsuwan / MSPS NETWORK
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
