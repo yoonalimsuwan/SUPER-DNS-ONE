@@ -1,6 +1,6 @@
 # =============================================================================
 # COVARIANT 4-VECTOR POTENTIAL MAXWELL-STRUCTURAL BRIDGE
-# EVOLUTION ONE Cluster / ONE Ecosystem
+# SUPER DNS ONE Cluster / ONE Ecosystem
 # =============================================================================
 # Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
 # ORCID        : 0009-0008-2374-0788
