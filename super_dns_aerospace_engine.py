@@ -37,19 +37,20 @@ class MaterialProperties:
 # ==========================================
 class CoreThermodynamics:
     def __init__(self):
-        # ตั้งค่าพารามิเตอร์เริ่มต้นสำหรับการคำนวณอุณหพลศาสตร์
+        # Initialize baseline parameters for thermodynamic calculations
         self.gas_constant = 8.314
 
     def calculate_phase_stability(self, composition: MaterialComposition) -> np.ndarray:
         """
-        คำนวณเสถียรภาพของเฟสโลหะผสมโดยใช้การประมวลผลแบบ Vectorized (NumPy)
-        หลีกเลี่ยงกระบวนการสุ่ม (Stochastic) เพื่อให้ได้ผลลัพธ์โครงสร้างที่สะท้อนกลไกทางฟิสิกส์อย่างตรงไปตรงมา
+        Calculate alloy phase stability using vectorized processing (NumPy).
+        Bypasses stochastic processes to yield deterministic structural matrices 
+        that directly reflect physical mechanics.
         """
         matrix_size = len(composition.elements)
-        # สร้าง Matrix โครงสร้างจำลองเบื้องต้น อิงตามอุณหภูมิที่กำหนด
+        # Generate baseline structural matrix based on given temperature
         stability_matrix = np.eye(matrix_size) * (composition.temperature_k / 298.15)
         
-        # เพิ่มน้ำหนัก (Weight) ให้กับส่วนประกอบหลัก (Base metal)
+        # Apply weight to the base element (primary metal)
         base_element_weight = max(composition.elements.values())
         stability_matrix *= base_element_weight
         
@@ -60,23 +61,23 @@ class CoreThermodynamics:
 # ==========================================
 class StructuralMechanics:
     def __init__(self, apply_structural_calculus: bool = True):
-        # เปิดช่องทางสำหรับเชื่อมต่อกับ Framework คณิตศาสตร์ขั้นสูง (เช่น Structural Calculus)
+        # Interface for coupling with advanced deterministic mathematical frameworks
         self.apply_sc = apply_structural_calculus
 
     def solve_yield_stress(self, phase_matrix: np.ndarray) -> float:
-        """คำนวณความทนทานต่อแรงดึงและแรงเค้น (สมการอนุพันธ์แบบ Deterministic)"""
-        # คำนวณ Norm ของเมทริกซ์เพื่อประเมินความแข็งแรงของพันธะ
+        """Deterministically compute yield stress and tensile strength (PDE formulation)."""
+        # Compute matrix norm to evaluate bond strength
         base_stress = float(np.linalg.norm(phase_matrix) * 450.0) 
         
         if self.apply_sc:
-            # ปรับจูนความแม่นยำสูง (High-Precision Tuning) ลดทอนความคลาดเคลื่อน
+            # High-Precision Tuning to strictly minimize margin of error
             base_stress *= 1.15 
             
         return base_stress
 
     def calculate_fatigue(self, yield_stress: float) -> int:
-        """คำนวณวงจรความล้า (Fatigue Life) ตามทฤษฎีกลศาสตร์การแตกหัก"""
-        # ความสัมพันธ์แบบไม่เชิงเส้นระหว่าง Yield Stress และวงจรการใช้งาน
+        """Calculate fatigue life cycles based on fracture mechanics principles."""
+        # Non-linear relationship between yield stress and operational cycles
         return int((yield_stress ** 2) / 8.5)
 
 # ==========================================
@@ -84,12 +85,12 @@ class StructuralMechanics:
 # ==========================================
 class AeroCFDInteraction:
     def __init__(self, enable_dns_coupling: bool = True):
-        # ออกแบบมาเพื่อรองรับการเชื่อมต่อกับ Direct Numerical Simulation (DNS) Solvers
+        # Architecture prepared for Direct Numerical Simulation (DNS) solver integration
         self.enable_dns = enable_dns_coupling
 
     def evaluate_boundary_layer_stress(self, wind_shear_pa: float, temp_k: float) -> float:
-        """ประเมินแรงเสียดทานที่ผิววัสดุและการคืบตัวเมื่อเผชิญสภาพแวดล้อมการบิน"""
-        # อัตราการคืบ (Creep Rate) จะแปรผันตามอุณหภูมิที่สูงขึ้นอย่างมีนัยสำคัญ
+        """Evaluate boundary layer friction and thermal creep under aerodynamic load."""
+        # Creep rate scales significantly with elevated temperatures
         thermal_creep_factor = (temp_k / 1000.0) ** 2.5
         dynamic_load = wind_shear_pa * 0.00012
         
@@ -102,31 +103,31 @@ class HPCDispatcher:
     @staticmethod
     async def run_simulation_task(material: MaterialComposition, task_id: str) -> MaterialProperties:
         """
-        จำลองระบบกระจายคิวงาน (Task Queue) แบบ Asynchronous 
-        เพื่อรองรับการคำนวณคู่ขนานในสเกลระดับซูเปอร์คอมพิวเตอร์
+        Simulate an asynchronous task queue dispatcher 
+        to support parallel execution on supercomputer scales.
         """
         elements_list = list(material.elements.keys())
         print(f"[{task_id}] Dispatching task to HPC Node. Material: {elements_list}...")
         
-        # [Simulate Computation Time] - คืนทรัพยากรให้ Event Loop ไปทำงานอื่นระหว่างที่โหนดกำลังรัน
+        # [Simulate Computation Time] Yielding event loop for concurrent execution
         await asyncio.sleep(1.5) 
         
-        # --- เริ่มต้น Pipeline ภายใน Worker ---
+        # --- Initialize Worker Pipeline ---
         thermo = CoreThermodynamics()
         mech = StructuralMechanics(apply_structural_calculus=True)
         aero = AeroCFDInteraction(enable_dns_coupling=True)
         
-        # 1. รันส่วนอุณหพลศาสตร์
+        # 1. Execute Thermodynamics sequence
         phase_matrix = thermo.calculate_phase_stability(material)
         
-        # 2. รันส่วนกลศาสตร์โครงสร้าง
+        # 2. Execute Structural Mechanics sequence
         yield_stress = mech.solve_yield_stress(phase_matrix)
         fatigue = mech.calculate_fatigue(yield_stress)
         
-        # 3. รันส่วนปฏิกิริยาของไหล (สมมติแรง Wind Shear ที่ขอบปีก = 65,000 Pa)
+        # 3. Execute Fluid Dynamics interaction (Assume wing edge wind shear = 65,000 Pa)
         creep = aero.evaluate_boundary_layer_stress(wind_shear_pa=65000.0, temp_k=material.temperature_k)
         
-        # 4. ประเมินผลขั้นสุดท้าย (Pass/Fail Criteria สำหรับชิ้นส่วน Aerospace)
+        # 4. Final Evaluation (Pass/Fail criteria for aerospace components)
         is_viable = (yield_stress >= 850.0) and (fatigue >= 100000) and (creep < 15.0)
         
         print(f"[{task_id}] Computation completed.")
@@ -146,15 +147,15 @@ async def main():
     print("  Initializing Deterministic Solvers and HPC Worker  ")
     print("=====================================================\n")
     
-    # สมมติ Request ต้องการทดสอบโลหะผสมเกรดการบิน 2 ชนิด
-    # 1. Ti-6Al-4V (ไทเทเนียมอัลลอยด์ที่ใช้ในเครื่องบินรบ)
+    # Request to simulate two distinct aerospace-grade alloys
+    # 1. Ti-6Al-4V (High-performance aerospace titanium alloy)
     material_1 = MaterialComposition(
         elements={'Ti': 0.90, 'Al': 0.06, 'V': 0.04},
         temperature_k=900.0,
         pressure_pa=101325.0
     )
     
-    # 2. Al-Li (อะลูมิเนียม-ลิเธียม น้ำหนักเบา)
+    # 2. Al-Li (Lightweight Aluminum-Lithium alloy)
     material_2 = MaterialComposition(
         elements={'Al': 0.98, 'Li': 0.02},
         temperature_k=450.0,
@@ -163,7 +164,7 @@ async def main():
     
     start_time = time.time()
     
-    # กระจายงานเข้า HPC Queue ทำงานพร้อมกัน (Parallel Async Execution)
+    # Dispatch parallel tasks to HPC queue via Async execution
     tasks = [
         HPCDispatcher.run_simulation_task(material_1, "JOB_Ti64"),
         HPCDispatcher.run_simulation_task(material_2, "JOB_AlLi")
@@ -171,7 +172,7 @@ async def main():
     
     results = await asyncio.gather(*tasks)
     
-    # สรุปผลลัพธ์
+    # Output Summary
     materials_tested = ["Ti-6Al-4V (Titanium Alloy)", "Al-Li (Aluminum-Lithium)"]
     print("\n--- Simulation Results ---")
     for i, res in enumerate(results):
@@ -185,5 +186,5 @@ async def main():
     print(f"\nTotal Pipeline Execution Time: {time.time() - start_time:.4f} seconds")
 
 if __name__ == "__main__":
-    # รันโปรแกรมหลักผ่าน Async Event Loop
+    # Execute the main async event loop
     asyncio.run(main())
