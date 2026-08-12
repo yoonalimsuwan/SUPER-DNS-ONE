@@ -34,6 +34,7 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 
 **This software is not intended, tested, or authorised for military applications, weapons development, or any form of armed conflict.**
 
+Thanks OpenFOAM for the Foundation of CFD.
 ---
 
 ## Overview
