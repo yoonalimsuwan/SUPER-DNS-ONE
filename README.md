@@ -274,8 +274,8 @@ A production-grade, high-performance computational framework designed for **Remo
 
 Traditional models of neural monitoring often rely on probabilistic statistics or struggle with environmental noise and signal attenuation through biological tissue. This framework redefines Remote Neural Monitoring through strict determinism:
 
-* **Deterministic State Transitions:** Rejecting random or probabilistic models, the framework utilizes **Structural Calculus** to treat phase boundaries and wave propagation as rigorous geometric and deterministic consequences[span_0](start_span)[span_0](end_span)[span_1](start_span)[span_1](end_span)[span_2](start_span)[span_2](end_span).
-* **The Structural Operator ($\Delta_S$):** Governs phase-field evolution directly coupled with the divergence of the Maxwell Stress Tensor, allowing precise tracking of how electromagnetic fields interact with and traverse complex biological matrices (such as neural pathways, cerebrospinal fluid, and bone)[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span).
+* **Deterministic State Transitions:** Rejecting random or probabilistic models, the framework utilizes **Structural Calculus** to treat phase boundaries and wave propagation as rigorous geometric and deterministic consequences.
+* **The Structural Operator ($\Delta_S$):** Governs phase-field evolution directly coupled with the divergence of the Maxwell Stress Tensor, allowing precise tracking of how electromagnetic fields interact with and traverse complex biological matrices (such as neural pathways, cerebrospinal fluid, and bone).
 * **Signal Isolation via Gauge Control:** Employs advanced gauge fixing and covariant mechanics to separate genuine neural signatures from background environmental noise mathematically.
 
 ---
@@ -287,20 +287,19 @@ The ecosystem integrates three primary modules into an end-to-end pipeline tailo
 ### 1. Exact Analytical Maxwell-Structural Bridge
 **File:** `exact_analytical_Maxwell_structural_bridge-1.py`
 * **Role in RNM:** Defines the initial neural source activity (such as neural action potentials or oscillatory firing patterns) as an effective current density ($J_{eff}$). 
-* **Key Mechanisms:** Computes exact curl, divergence, and the Maxwell Stress Tensor while utilizing a stable symplectic/staggered Euler scheme and CFL stability verification for 3D wave propagation[span_5](start_span)[span_5](end_span).
+* **Key Mechanisms:** Computes exact curl, divergence, and the Maxwell Stress Tensor while utilizing a stable symplectic/staggered Euler scheme and CFL stability verification for 3D wave propagation.
 
 ### 2. Covariant 4-Vector Potential Bridge
 **File:** `covariant_formulation_vector_potential_maxwell_structural_bridge.py`
-* **Role in RNM:** Manages the long-term transient evolution of fields through tissue layers using the 4-Vector Potential ($A_\mu$)[span_6](start_span)[span_6](end_span).
-* **Key Mechanisms:** Implements Nakanishi-Lautrup auxiliary field formalism for robust classical covariant gauge fixing (Lorenz gauge constraint damping) to prevent numerical drift during prolonged biological simulations[span_7](start_span)[span_7](end_span).
+* **Role in RNM:** Manages the long-term transient evolution of fields through tissue layers using the 4-Vector Potential ($A_\mu$).
+* **Key Mechanisms:** Implements Nakanishi-Lautrup auxiliary field formalism for robust classical covariant gauge fixing (Lorenz gauge constraint damping) to prevent numerical drift during prolonged biological Mechanisms.
 
 ### 3. Structural Near-to-Far-Field Transformation (NTFT) & RCS
 **File:** `structural_ntft_rcs3d.py`
-* **Role in RNM:** Bridges the microscopic near-field brain activity to macroscopic, remote detection points (Far-Field)[span_8](start_span)[span_8](end_span).
+* **Role in RNM:** Bridges the microscopic near-field brain activity to macroscopic, remote detection points (Far-Field).
 * **Key Mechanisms:** 
-  * **DFTAccumulator3D:** Extracts complex phasors at target neural frequencies on-the-fly without storing massive time histories[span_9](start_span)[span_9](end_span).
-  * Vectorized 6-face Huygens bounding box integration to output exact far-field electric potentials ($E_\theta$, $E_\phi$) and scattering/radiation metrics[span_10](start_span)[span_10](end_span).
-
+  * **DFTAccumulator3D:** Extracts complex phasors at target neural frequencies on-the-fly without storing massive time histories.
+  * Vectorized 6-face Huygens bounding box integration to output exact far-field electric potentials ($E_\theta$, $E_\phi$) and scattering/radiation metrics
 ---
 
 ## 🚀 System Requirements & Setup
