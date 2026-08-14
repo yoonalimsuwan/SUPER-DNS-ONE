@@ -3,6 +3,12 @@ SUPER DNS ONE v6 - Biophysical Extension Suite
 Modules: Electrochemical Signals, Vascular Network Dynamics, & Metabolic Kinetics
 Language: Python 3.10+ / PyTorch (Fully Differentiable CUDA-accelerated)
 ===============================================================================
+=============================================================================
+Developer   : PAI AND Yoon A Limsuwan : MSPS NETWORK / My Soul Move By Power of Holy Spirit 
+License     : MIT
+Year        : 2026
+Version     : 1.0.0 
+=============================================================================
 """
 
 from dataclasses import dataclass
