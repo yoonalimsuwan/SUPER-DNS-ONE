@@ -1,12 +1,6 @@
 # ===============================================================================
 # SUPER DNS ONE v6 - SESI Biomass Synthesis & Topological Integration Engine
 # ===============================================================================
-=============================================================================
-Developer   : PAI AND Yoon A Limsuwan : MSPS NETWORK / My Soul Move By Power of Holy Spirit 
-License     : MIT
-Year        : 2026
-Version     : 1.0.0 
-=============================================================================
 # Framework Integrations:
 # 1. Advanced Biomass Metabolism (Lipids, Amino Acids, ATP, Glucose, O2)
 # 2. Global Well-Posedness of Topologically-Active Structural Interfaces
