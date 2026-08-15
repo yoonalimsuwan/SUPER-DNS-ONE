@@ -11,16 +11,6 @@
 # GitHub     : https://github.com/yoonalimsuwan
 # Email      : msps4u@gmail.com
 #
-# AI Development Assistants:
-#   Claude   (Anthropic)        — architecture co-design, missing-component
-#                                 specification, code review, AGI completeness
-#                                 analysis v1.0 → v2.0 → v3.0; curriculum
-#                                 training, PCGrad, InfoNCE alignment,
-#                                 EcosystemOrchestrator design
-#   GPT-4o   (OpenAI)           — supplementary architecture consultation
-#   Gemini   (Google DeepMind)  — cross-validation of design decisions
-#   DeepSeek (DeepSeek AI)      — open-source alignment review
-#
 # =============================================================================
 
 from __future__ import annotations
