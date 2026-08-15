@@ -2,6 +2,11 @@
 # UNIFIED HYPERSONIC AEROSPACE & BATTERY ENGINE
 # SUPER DNS ONE Cluster / SESI Framework Integration
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# =============================================================================
+
 
 import numpy as np
 import asyncio
