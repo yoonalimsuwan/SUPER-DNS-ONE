@@ -3,7 +3,7 @@
 # SUPER DNS ONE Cluster / ONE Ecosystem
 # =============================================================================
 # Description: Ultra-lightweight, O(N) optimized native module for differentiating 
-# Micro-Kill Drones from Biological Entities (Birds) using pre-extracted fields.
+# Micro-Drones from Biological Entities (Birds) using pre-extracted fields.
 # Focuses on Enstrophy, Thermal Gradients, and Dielectric Permittivity.
 # =============================================================================
 # =============================================================================
