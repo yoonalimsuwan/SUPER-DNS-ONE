@@ -1,6 +1,6 @@
 # =============================================================================
 # EXACT ANALYTICAL MAXWELL-STRUCTURAL BRIDGE — PDE Solver (SESI)
-# EVOLUTION ONE Cluster / ONE Ecosystem
+# SUPER DNS ONE Cluster / ONE Ecosystem
 # =============================================================================
 
 from __future__ import annotations
