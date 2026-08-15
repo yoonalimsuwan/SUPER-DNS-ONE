@@ -6,6 +6,15 @@
 # Micro-Kill Drones from Biological Entities (Birds) using pre-extracted fields.
 # Focuses on Enstrophy, Thermal Gradients, and Dielectric Permittivity.
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
+
 
 import torch
 import torch.nn as nn
