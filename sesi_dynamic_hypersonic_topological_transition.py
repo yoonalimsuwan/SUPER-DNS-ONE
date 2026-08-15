@@ -7,6 +7,14 @@
 # hypersonic shockwave thermodynamics. Utilizes a Straight-Through Estimator 
 # (STE) to enable end-to-end backpropagation through discrete topological jumps.
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
 
 import torch
 import torch.nn as nn
