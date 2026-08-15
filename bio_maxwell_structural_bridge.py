@@ -1,6 +1,14 @@
 # =============================================================================
 # EXACT ANALYTICAL BIO-MAXWELL-STRUCTURAL BRIDGE — PDE Solver
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
 from __future__ import annotations
 import torch
 import torch.nn as nn
