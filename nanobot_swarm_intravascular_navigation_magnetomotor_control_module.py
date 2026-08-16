@@ -1,3 +1,15 @@
+# Nanobot Swarm Navigation Module
+# SUPER DNS ONE Cluster / ONE Ecosystem
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
