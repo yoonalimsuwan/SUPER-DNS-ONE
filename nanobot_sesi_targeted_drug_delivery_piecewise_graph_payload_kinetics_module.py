@@ -1,3 +1,15 @@
+# =============================================================================
+# Nanobot Payload Delivery Module (SESI)
+# SUPER DNS ONE Cluster / ONE Ecosystem
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
+
 class NanobotPayloadDeliveryModule(nn.Module):
     """
     Differentiable multi-compartment payload release kinetics engine integrated with 
