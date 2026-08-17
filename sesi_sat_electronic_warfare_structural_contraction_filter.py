@@ -6,6 +6,11 @@
 # Defeats EW jamming and spoofing via SAT Structural Calculus and No-Zeno 
 # double-exponential bounds. Eliminates false signatures deterministically.
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# =============================================================================
+
 
 import torch
 import torch.nn as nn
