@@ -350,6 +350,46 @@ This repository contains a unified cluster of six production-optimized, GPU-acce
 
 ---
 
+# SESI Drone & Biological Target Discriminator Cluster
+
+**Omni-Spectral Drone vs. Biological Discriminator** is a high-performance, GPU-accelerated pipeline built on the **Self-Evolving Structural Interfaces (SESI)** framework. This cluster is engineered to perform real-time, ultra-low-latency classification of micro-targets (e.g., small drones) versus biological entities (e.g., birds) by leveraging deep multi-physics analysis.
+
+## Overview
+This pipeline inverts the SESI Stealth Framework to amplify micro-signatures, utilizing **Exact Maxwell-Structural Solvers** and **Extreme-Value Anomaly Detection**. By analyzing enstrophy (fluid wake chaos), thermal gradient entropy, and dielectric permittivity, the system provides a robust, fully differentiable target discrimination mechanism for next-generation defense and environmental monitoring applications.
+
+## Key Innovations
+* **End-to-End Differentiability:** Employs the **Straight-Through Estimator (STE)**, allowing for continuous model training while enabling hard, real-time binary routing (Drone vs. Bio).
+* **O(N) Production Efficiency:** Engineered with lightweight, optimized classification MLPs to achieve real-time inference throughput without the computational overhead of traditional CFD-based detection.
+* **Physics-Informed Discrimination:** Bypasses radar-only constraints by integrating multi-spectral physical indicators, ensuring high confidence even in low-RCS (stealth-capable) drone detection scenarios.
+* **No-Zeno Gumbel Statistics:** Applies Double-Exponential extreme-value bounds to filter biological noise from synthetic structural anomalies.
+
+---
+
+## Module Architecture
+
+### 1. Classification & Discrimination
+* **`sesi_micro_target_biological_discriminator_module.py`**
+  Specialized for micro-entity classification. Evaluates Enstrophy, Thermal Gradients, and Dielectric permittivity baselines to identify synthetic material signatures.
+* **`sesi_omni_spectral_drone_and_biological_discriminator_module.py`**
+  The omni-spectral core. Inverts stealth-cloaking logic to amplify micro-mechanical signatures, providing robust confidence metrics for distinguishing mechanical targets from natural entities.
+
+### 2. Pipeline Integration
+* **`sesi_omni_drone_classification_pipeline.py`**
+  The unified processing orchestrator. Bridges Maxwell-Structural solvers with the detector module, providing a seamless interface to process velocity, thermal, EM, and plasma fields into definitive classification results.
+
+---
+
+## Technical Specifications
+
+| Feature | Mechanism |
+| :--- | :--- |
+| **Logic** | Structural Calculus / SESI |
+| **Backpropagation** | Straight-Through Estimator (STE) |
+| **Complexity** | O(N) |
+| **Input Fields** | NS3D (Velocity), Thermal (IR), Dielectric, EM |
+
+---
+
 # SUPER DNS ONE Cluster / Biological SESI Ecosystem
 
 ## 🌌 Overview
