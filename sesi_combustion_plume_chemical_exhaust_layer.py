@@ -7,6 +7,10 @@
 # (Combustion Plumes) for traditional Hypersonic targets.
 # Integrates seamlessly in parallel to the Battery/EMF Tensor Network.
 # =============================================================================
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# =============================================================================
 
 import torch
 import torch.nn as nn
