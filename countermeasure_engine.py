@@ -1,3 +1,18 @@
+# =============================================================================
+# Multi-Domain Countermeasure Engine
+# =============================================================================
+# =============================================================================
+#
+# Developer  : PAI , Yoon A Limsuwan / MSPS NETWORK
+#              MY SOUL MOVE BY POWER OF HOLY SPIRIT
+# License    : MIT
+# Year       : 2026
+# ORCID      : 0009-0008-2374-0788
+# GitHub     : https://github.com/yoonalimsuwan
+# Email      : msps4u@gmail.com
+#
+# =============================================================================
+
 """
 Production-Grade Native Fully Differentiable Multi-Domain Countermeasure Engine
 Framework: PyTorch (High-Performance Tensor Computing & Autograd)
