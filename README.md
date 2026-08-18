@@ -288,7 +288,7 @@ Traditional models of neural monitoring often rely on probabilistic statistics o
 The ecosystem integrates three primary modules into an end-to-end pipeline tailored for bio-electromagnetic and neural simulation:
 
 ### 1. Exact Analytical Maxwell-Structural Bridge
-**File:** `exact_analytical_Maxwell_structural_bridge-1.py`
+**File:** `exact_analytical_Maxwell_structural_bridge.py`
 * **Role in RNM:** Defines the initial neural source activity (such as neural action potentials or oscillatory firing patterns) as an effective current density ($J_{eff}$). 
 * **Key Mechanisms:** Computes exact curl, divergence, and the Maxwell Stress Tensor while utilizing a stable symplectic/staggered Euler scheme and CFL stability verification for 3D wave propagation.
 
