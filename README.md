@@ -333,7 +333,7 @@ This repository contains a unified cluster of six production-optimized, GPU-acce
 ### 1. The Physics & Engine Layer
 * **`sesi_dynamic_hypersonic_topological_transition.py`**
   Computes 3D tensor fields for Activation Energy  and Fluctuation Variance. It drives the fundamental thermodynamic topological transitions (Nucleation, Merging, Branching) within the plasma sheath.
-* **`sesi_unified_hypersonic_aerospace_battery.py`**
+* **`sesi_sat_unified_hypersonic_aerospace_battery.py`**
   The HPC Orchestrator. Solves both Aerospace Structural Mechanics (e.g., thermal creep) and Battery Dynamics (e.g., dendrite resistance) simultaneously under extreme hypersonic stress loads.
 
 ### 2. Detection & Cloaking Layer (Stealth Mechanics)
