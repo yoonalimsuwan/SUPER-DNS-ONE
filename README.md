@@ -345,7 +345,7 @@ This repository contains a unified cluster of six production-optimized, GPU-acce
   Calculates dynamic RCS attenuation by mapping incident electromagnetic waves into a topologically-active, disordered plasma medium, successfully absorbing incoming radar energy.
 
 ### 3. Active Control Layer
-* **`hypersonic_flight_control.py`**
+* **`sesi_sat_hypersonic_flight_control.py`**
   The production-grade SESI Flight Controller (Autopilot). It prevents aeroelastic flutter and shock oscillation by adaptively modulating control surfaces to artificially raise the activation energy barrier of catastrophic flow changes.
 
 ---
@@ -414,7 +414,7 @@ Fully differentiable 3D intravascular navigation, thermal management, and precis
 
 ### 2. Biomass Metabolism & Biophysical Topology
 Continuous multi-species reaction-diffusion systems coupled with discrete biological growth.
-*   **`biomass_synthesis_topological.py`**: Models advanced metabolic pathways (O2, Glucose, Lactate, ATP, Lipids, Amino Acids). Deducts physical biomass to materialize discrete topological jumps.
+*   **`sesi_biomass_synthesis_topological.py`**: Models advanced metabolic pathways (O2, Glucose, Lactate, ATP, Lipids, Amino Acids). Deducts physical biomass to materialize discrete topological jumps.
 *   **`sesi_biophysical_integration.py`**: The master piecewise-operational bridge linking continuous biophysics (Poisson-Nernst-Planck, Darcy-Brinkman) with discrete structural SDEs.
 
 ### 3. Neuro-Optics & Maxwell-Structural Electrodynamics
