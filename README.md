@@ -350,6 +350,39 @@ This repository contains a unified cluster of six production-optimized, GPU-acce
 
 ---
 
+# SESI-SAT: Native Fully Differentiable Aerospace Engine Framework
+
+## Overview
+The SESI-SAT Aerospace Engine Suite is a high-performance research repository containing native fully differentiable engines for hypersonic flight simulation, battery dynamics, and structural analysis. This framework integrates Structural Calculus and the SESI (Disordered Media) framework, enabling efficient gradient-based optimization of complex aerospace systems [cite: 1, 2, 3].
+
+Designed by **PAI AND Yoon A Limsuwan (MSPS NETWORK)**, these modules leverage PyTorch's `autograd` to bypass traditional, computationally expensive micro-state enumeration, utilizing polynomial quotient mapping and topological signature evaluation instead [cite: 1, 2].
+
+## Core Modules
+
+### 1. Aerospace Engine Engine
+`sesi_sat_aerospace_engine_native_full_differentiable.py`
+*   **Purpose**: A core engine pipeline integrating thermodynamics, structural mechanics, and CFD interactions [cite: 1].
+*   **Key Features**:
+    *   **Structural Calculus Resolver**: Implements Universal Contraction Operator ($\Phi_U$) and Topological Signature Matrix ($M_{[A]}$) evaluation [cite: 1].
+    *   **No-Zeno Regulation**: Enforces strict stability conditions using Gumbel-type bounds [cite: 1].
+    *   **Differentiable Physics**: Native PyTorch support for full-gradient optimization of material compositions [cite: 1].
+
+### 2. Hypersonic Battery Engine Module
+`sesi_sat_battery_powered_hypersonic_aircraft_engine.py`
+*   **Purpose**: Manages high-energy density storage (Solid-State, Li-Sulfur) and power delivery for hypersonic platforms [cite: 2].
+*   **Key Features**:
+    *   **State Space Mapping**: Collapses exponential micro-state spaces into $O(m^3 n^2)$ equivalence classes [cite: 2].
+    *   **Aerothermodynamic Control**: Regulates Nucleation, Merging, and Branching (N, M, B) states to prevent hypersonic unstart [cite: 2].
+    *   **Production Loss Functions**: Implements custom loss for structural stability and cost minimization [cite: 2].
+
+### 3. Hypersonic Battery Solver
+`sesi_sat_hypersonic_battery_solver.py`
+*   **Purpose**: A dedicated solver for 3D battery dynamics within disordered media [cite: 3].
+*   **Key Features**:
+    *   **Differentiable Gumbel Filter**: Enables gradient propagation through discrete no-zeno topological transitions [cite: 3].
+    *   **Laplacian Discretization**: Performs 3D stochastic differential equation (SDE) integration on ALE reference domains [cite: 3].
+
+
 # SESI Drone & Biological Target Discriminator Cluster
 
 **Omni-Spectral Drone vs. Biological Discriminator** is a high-performance, GPU-accelerated pipeline built on the **Self-Evolving Structural Interfaces (SESI)** framework. This cluster is engineered to perform real-time, ultra-low-latency classification of micro-targets (e.g., small drones) versus biological entities (e.g., birds) by leveraging deep multi-physics analysis.
