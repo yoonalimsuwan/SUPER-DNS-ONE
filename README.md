@@ -557,6 +557,43 @@ This repository contains a suite of production-grade, fully differentiable PyTor
     *   **Rheological Langevin Solver:** State-dependent stochastic forcing optimized for EVS (Extreme-Value Statistics) regimes.
     *   **CSOC Optimization:** Differentiable criticality loss calculation to maintain system activity near critical regimes.
     *   **Fully Autograd-Compatible:** Native 3D finite difference operators implemented as PyTorch convolutional kernels.
+ 
+# SUPER DNS ONE v6: Deterministic Fluid Dynamics Framework
+
+This repository contains the core modules for **SUPER DNS ONE v6**, a groundbreaking framework for solving the 3D Navier-Stokes problem and high-performance computational fluid dynamics (CFD). By leveraging the **Structural Calculus** framework and the **No-Zeno Condition**, this system transforms probabilistic fluid simulations into deterministic, fully differentiable operations.
+
+## Architecture Overview
+
+The system is composed of three interconnected modules designed to bridge classical fluid dynamics with topologically-active structural interfaces (SESI).
+
+### 1. `DeterministicDNSOptimizer`
+**Purpose:** Hardware and memory optimization engine.
+*   **Function:** Manages VRAM allocation during deep temporal unrolling.
+*   **Key Features:** Implements `autocast` and Gradient Checkpointing to enable $O(1)$ memory consumption per segment, allowing for large-scale CFD simulations that were previously computationally prohibitive.
+
+### 2. `StructuralDNSOptimizer`
+**Purpose:** Mathematical control and topological stabilization layer.
+*   **Function:** Applies the **Structural Calculus** framework to regulate the fluid's topological state.
+*   **Key Features:**
+    *   `UniversalContractionOperator`: Compresses micro-states to prevent combinatorial explosions.
+    *   `DoubleExponentialNoZenoGate`: Prevents Zeno-trap induced singularities by ensuring topological transitions (nucleation, merging, branching) occur only finitely many times.
+
+### 3. `SUPER DNS ONE v6` (Core Solver)
+**Purpose:** The physics simulation engine.
+*   **Function:** Solves the incompressible Navier-Stokes equations using a 100% differentiable architecture.
+*   **Key Features:** 
+    *   Supports complex boundary conditions (e.g., `PyrolysisWallBC` for mass injection).
+    *   Utilizes differentiable Riemann Solvers (HLLC, AUSM+) to ensure smooth, global well-posedness as established by the No-Zeno condition.
+
+## Theory & Foundation
+This framework is built upon the foundational principles detailed in:
+**"Closing the Navier-Stokes 3D Problem: Global Regularity via Topologically-Active Structural Interfaces and the No-Zeno Condition"**
+by PAI AND Joanna Yoon A Catherine Limsuwan.
+
+The system replaces traditional energy-bound analytical methods with stochastic topological dynamics, ensuring that finite-time singularities are almost surely precluded.
+
+---
+
 
 
 Citing
