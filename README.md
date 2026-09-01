@@ -34,6 +34,8 @@ SUPER DNS ONE is a fully differentiable, three‑dimensional finite‑volume sol
 - **Civil aviation** – aerodynamic analysis, noise reduction, wake turbulence.
 - **Hypersonic civilian transport** – real‑gas effects, shock capturing, high‑speed boundary‑layer transition.
 
+And More.
+
 **This software is not intended, tested, or authorised for military applications, weapons development, or any form of armed conflict.**
 
 
