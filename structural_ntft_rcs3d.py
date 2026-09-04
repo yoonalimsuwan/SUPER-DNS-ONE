@@ -49,11 +49,11 @@ class DFTAccumulator3D(nn.Module):
 
         for key in fields_t:
             if key in self.real_parts:
-                self.real_parts[key] += fields_t[key] * cos_val
-                self.imag_parts[key] -= fields_t[key] * sin_val  # e^(-j * omega * t)
+                self.real_parts[key] = self.real_parts[key] + fields_t[key] * cos_val
+                self.imag_parts[key] = self.imag_parts[key] - fields_t[key] * sin_val  # e^(-j * omega * t)
         self.step_count += 1
 
-    def get_phasors() -> Dict[str, torch.Tensor]:
+    def get_phasors(self) -> Dict[str, torch.Tensor]:
         """Returns normalized complex phasors."""
         phasors = {}
         for key in self.real_parts:
@@ -267,13 +267,13 @@ class StructuralNTFTRCS3D(nn.Module):
             exp_phase = torch.exp(1j * phase.to(self.dtype))
 
             # Numerical Surface Integration
-            N_x += torch.matmul(exp_phase, J_s[0]) * dS
-            N_y += torch.matmul(exp_phase, J_s[1]) * dS
-            N_z += torch.matmul(exp_phase, J_s[2]) * dS
+            N_x = N_x + torch.matmul(exp_phase, J_s[0]) * dS
+            N_y = N_y + torch.matmul(exp_phase, J_s[1]) * dS
+            N_z = N_z + torch.matmul(exp_phase, J_s[2]) * dS
 
-            L_x += torch.matmul(exp_phase, M_s[0]) * dS
-            L_y += torch.matmul(exp_phase, M_s[1]) * dS
-            L_z += torch.matmul(exp_phase, M_s[2]) * dS
+            L_x = L_x + torch.matmul(exp_phase, M_s[0]) * dS
+            L_y = L_y + torch.matmul(exp_phase, M_s[1]) * dS
+            L_z = L_z + torch.matmul(exp_phase, M_s[2]) * dS
 
         # Spherical Transformation
         N_theta = N_x * cos_th * cos_ph + N_y * cos_th * sin_ph - N_z * sin_th
