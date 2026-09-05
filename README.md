@@ -634,16 +634,16 @@ from nanobot_sesi_crispr_cas_gene_editing_differentiable_kinetics_module import 
 device = "cuda"
 crispr_module = NanobotCRISPRCasEditingModule(dt=0.01, dx=1e-6, device=device).to(device)
 
-# Optional: Compile for production-level throughput
-# crispr_module = torch.compile(crispr_module)
+ Optional: Compile for production-level throughput
+ crispr_module = torch.compile(crispr_module)
 
 # 2. Mock inputs from surrounding SESI Ecosystem Modules
 batch_size, channels, z, y, x = 2, 1, 64, 64, 64
 
-# From NanobotPayloadDeliveryModule
+ From NanobotPayloadDeliveryModule
 released_rnp = torch.rand(batch_size, channels, z, y, x, device=device) 
 
-# From HyperthermiaAblationModule (Kelvin)
+ From HyperthermiaAblationModule (Kelvin)
 temp_field = torch.full((batch_size, channels, z, y, x), 312.15, device=device) 
 
 target_dna = torch.ones(batch_size, channels, z, y, x, device=device)
