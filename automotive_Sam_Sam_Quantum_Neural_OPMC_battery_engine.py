@@ -3,6 +3,7 @@
 # Native Full Differentiability | DEEE O(2^(2^N)) Tensor Algebra | No-Zeno Guard
 # Optimized for Maximum Cost Reduction & Automotive Solid-State Integration
 # =============================================================================
+# Developer              : PAI , Yoon A Limsuwan 
 # License                : MIT (2026)
 # =============================================================================
 
