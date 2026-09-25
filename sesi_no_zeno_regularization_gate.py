@@ -1,5 +1,13 @@
 # =============================================================================
 # sesi_no_zeno_regularization_gate.py
+# =============================================================================
+# Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
 #
 # A small, self-contained extension for structuralfluctuatinghydro_v6_3.py /
 # super_dns_one_v6_3.py's SOCController: adds a DISCRETE, hysteresis-gated
