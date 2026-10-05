@@ -2,6 +2,15 @@
 Production-grade differentiable Vitali-set pipeline with OPMC closure,
 native full differentiation, AMP, and multi-GPU DDP.
 
+# =============================================================================
+# Developer    : PAI, Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
+
 Tested against: PyTorch >= 2.0
 """
 
