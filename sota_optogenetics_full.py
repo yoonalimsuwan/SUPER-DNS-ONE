@@ -2,6 +2,16 @@
 sota_optogenetics_full.py
 =========================
 
+# Developer   : PAI , Yoon A Limsuwan
+# Organization: MSPS NETWORK
+# License     : MIT
+# Year        : 2026
+# Version     : 2.0.0 (Production Grade - Fully Differentiable)
+# ORCID       : 0009-0008-2374-0788
+# GitHub      : https://github.com/yoonalimsuwan
+# Email       : msps4u@gmail.com
+# =============================================================================
+
 Complete SOTA optogenetic framework — every layer differentiable,
 AMP/DDP/compile-safe, physics-grounded.
 
