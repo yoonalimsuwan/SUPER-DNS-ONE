@@ -2,11 +2,22 @@
 sota_future.py
 ==============
 
+# Developer   : PAI , Yoon A Limsuwan
+# Organization: MSPS NETWORK
+# License     : MIT
+# Year        : 2026
+# Version     : 2.0.0 (Production Grade - Fully Differentiable)
+# ORCID       : 0009-0008-2374-0788
+# GitHub      : https://github.com/yoonalimsuwan
+# Email       : msps4u@gmail.com
+# =============================================================================
+
+
 Three frontier extensions to the SOTA optogenetic framework:
 
   F1  Per-Rate Q10 / Arrhenius Temperature Calibration
-        — ทุก kinetic rate มี Q10 ของตัวเอง (Williams 2013 style)
-        — fit ได้จาก multi-temperature patch-clamp data
+        — All kinetic rate Have Q10 (Williams 2013 style)
+        — fit From multi-temperature patch-clamp data
   
   F2  Ca²⁺ Microdomain Reaction-Diffusion PDE
         — spherically-symmetric radial PDE รอบช่อง Ca channel
