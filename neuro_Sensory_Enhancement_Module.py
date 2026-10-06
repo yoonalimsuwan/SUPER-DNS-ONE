@@ -8,6 +8,14 @@ Branches (all differentiable end-to-end):
   4. In-memory recurrence          (stateful memory retention)
   5. OTA motor control + chemo     (muscle state, olfaction, gustation)
 
+# Developer    : PAI, Yoon A Limsuwan / MSPS NETWORK
+# ORCID        : 0009-0008-2374-0788
+# GitHub       : yoonalimsuwan
+# Contact      : msps4u@gmail.com
+# License      : MIT
+# Year         : 2026
+# =============================================================================
+
 Design notes
 ------------
 * Complex ops are implemented as two real matmuls so the whole graph is
