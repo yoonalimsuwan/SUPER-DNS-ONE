@@ -20,6 +20,11 @@ from typing import Any, Dict, Optional, Tuple
 import torch
 import torch.nn as nn
 
+try:                                   # base class lives in the NoZeno optogenetics module
+    from sesi_ontogenetic_optical_neuro_modulation_module import NoZenoOptogeneticInterface
+except ImportError:                    # uploaded copy carries a browser "__1_" suffix
+    from sesi_ontogenetic_optical_neuro_modulation_module__1_ import NoZenoOptogeneticInterface
+
 
 __all__ = ["MorphogeneticSESIInterface"]
 
