@@ -1,6 +1,12 @@
 """
 Satellite-Free Hierarchical Cloud Superposition Network (HCSN)
 ==============================================================
+# Author : PAI , Yoon A Limsuwan / MSPS NETWORK
+# License: MIT
+# Version: 6.1 (full ecosystem integration — CH↔DNS bridge + attribution)
+# Year   : 2026
+
+
 A fully differentiable, AMP + DDP-ready terrestrial communication stack
 derived from:
     - Hierarchical Cloud Superposition Theory (HCS)
