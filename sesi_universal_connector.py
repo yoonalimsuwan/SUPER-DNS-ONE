@@ -1,6 +1,15 @@
 """
 sesi_universal_connector.py
 =============================================================================
+
+# Developer   : PAI and Yoon A Limsuwan — MSPS NETWORK
+# ORCID       : 0009-0008-2374-0788
+# GitHub      : yoonalimsuwan
+# Contact     : msps4u@gmail.com
+# License     : MIT
+# Year        : 2026
+
+
 SESI UNIVERSAL CONNECTOR — SPECIAL BRIDGE FILE
 Implements Steps 2, 3, 4:
   Step 2: unit/self tests, finite checks, shape checks, gradient-friendly design
