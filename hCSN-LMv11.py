@@ -1,6 +1,12 @@
 """
 HCSN-LM v1.1 — causal LM with periodic HCSN measurement passes.
 RoPE + SwiGLU + KV-cache + SDPA. Generation-safe. FSDP-compatible.
+
+Developer : PAI AND Yoon A Limsuwan 
+Organizations : MSPS NETWORK 
+Licences : MIT
+Year : 2026
+
 """
 from __future__ import annotations
 
