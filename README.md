@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 20
+# SUPER DNS ONE 21
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
@@ -10,8 +10,7 @@ Thanks OpenFOAM for the Foundation of CFD.
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20007526-blue)](https://doi.org/10.5281/zenodo.20007526)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.19814975-blue)](https://doi.org/10.5281/zenodo.19814975)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20194882-blue)](https://doi.org/10.5281/zenodo.20194882)
-[![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23677079-blue)](
-https://doi.org/10.5281/zenodo.23677079)
+[![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23685026-blue)](https://doi.org/10.5281/zenodo.23685026)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20468598-blue)](https://doi.org/10.5281/zenodo.20468598)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21120913-blue)](https://doi.org/10.5281/zenodo.21120913)
 [![Zenodo](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20730429-blue)](https://doi.org/10.5281/zenodo.20730429)
@@ -278,7 +277,7 @@ If you use SUPER DNS ONE in your research, please cite:
 ```
 PAI , Yoon A Limsuwan. "SUPER DNS ONE: SOC‑Controlled Direct Numerical Simulation for Peaceful Applications."
 Zenodo, 2026.
-https://doi.org/10.5281/zenodo.23677079
+https://doi.org/10.5281/zenodo.23685026
 ```
 
 Or cite the GitHub repository:
