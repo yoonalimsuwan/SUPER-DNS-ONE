@@ -1,0 +1,230 @@
+/**
+ * SESI On-Device CFD Inference via ONNX Runtime Mobile + NNAPI
+ *
+ * Developer    : PAI, Yoon A Limsuwan / MSPS NETWORK
+ * MY SOUL MOVE BY POWER OF HOLY SPIRIT
+ * ORCID        : 0009-0008-2374-0788
+ * License      : MIT
+ * Year         : 2026
+ *
+ * HONEST SCOPE:
+ *  - NNAPI availability is device-dependent; unsupported ops fall back to CPU
+ *  - First NNAPI call triggers model compilation (~100ms–2s on some devices)
+ *  - Dynamic shapes limit NNAPI usage; model should be exported with static shapes
+ *  - This is a RESEARCH/DEVELOPMENT wrapper, not production-hardened
+ */
+
+package org.mspsnetwork.sesi.inference
+
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtException
+import ai.onnxruntime.OrtSession
+import android.content.Context
+import android.util.Log
+import java.io.Closeable
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
+
+/**
+ * NNAPI execution flags (mirror of onnxruntime/core/providers/nnapi).
+ */
+object NnapiFlags {
+    const val NNAPI_FLAG_USE_FP16: Int = 0x001
+    const val NNAPI_FLAG_USE_NCHW: Int = 0x002
+    const val NNAPI_FLAG_CPU_DISABLED: Int = 0x004
+    const val NNAPI_FLAG_CPU_ONLY: Int = 0x008
+    const val NNAPI_FLAG_LAST: Int = 0x008
+}
+
+/**
+ * Execution backend choice for benchmarking.
+ */
+enum class BackendMode(val label: String) {
+    CPU_ONLY("CPU (XNNPACK)"),
+    NNAPI_DEFAULT("NNAPI (auto)"),
+    NNAPI_FP16("NNAPI + FP16"),
+    NNAPI_NCHW("NNAPI + NCHW"),
+    NNAPI_CPU_FALLBACK_DISABLED("NNAPI (no CPU fallback)"),
+}
+
+/**
+ * Main SESI inference wrapper.
+ *
+ * Usage:
+ * ```
+ * val model = SesiOnnxModel(context)
+ * model.load("sesi_cfd.ort", BackendMode.NNAPI_FP16)
+ * val input = FloatArray(3 * 64 * 64)  // random or real data
+ * val output = model.run(input)
+ * model.close()
+ * ```
+ */
+class SesiOnnxModel(private val context: Context) : Closeable {
+
+    companion object {
+        private const val TAG = "SesiOnnxModel"
+    }
+
+    private var env: OrtEnvironment? = null
+    private var session: OrtSession? = null
+    private var backend: BackendMode = BackendMode.CPU_ONLY
+
+    // Cached model metadata
+    var inputName: String = "input"
+        private set
+    var outputName: String = "output"
+        private set
+    var inputShape: LongArray = longArrayOf()
+        private set
+
+    val isLoaded: Boolean
+        get() = session != null
+
+    /**
+     * Load model from assets with specified backend.
+     */
+    fun load(assetName: String, mode: BackendMode) {
+        close()  // release any previous session
+
+        env = OrtEnvironment.getEnvironment()
+        val options = OrtSession.SessionOptions()
+
+        // Common optimizations
+        options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        options.setIntraOpNumThreads(Runtime.getRuntime().availableProcessors())
+        options.setExecutionMode(OrtSession.SessionOptions.ExecutionMode.SEQUENTIAL)
+
+        // Backend-specific configuration
+        backend = mode
+        when (mode) {
+            BackendMode.CPU_ONLY -> {
+                Log.i(TAG, "Using CPU only (XNNPACK)")
+                // XNNPACK is enabled by default in ORT mobile if available
+            }
+            BackendMode.NNAPI_DEFAULT -> {
+                options.addNnapi()
+            }
+            BackendMode.NNAPI_FP16 -> {
+                options.addNnapi(NnapiFlags.NNAPI_FLAG_USE_FP16)
+            }
+            BackendMode.NNAPI_NCHW -> {
+                options.addNnapi(
+                    NnapiFlags.NNAPI_FLAG_USE_NCHW or NnapiFlags.NNAPI_FLAG_USE_FP16
+                )
+            }
+            BackendMode.NNAPI_CPU_FALLBACK_DISABLED -> {
+                options.addNnapi(
+                    NnapiFlags.NNAPI_FLAG_USE_FP16 or NnapiFlags.NNAPI_FLAG_CPU_DISABLED
+                )
+            }
+        }
+
+        // Enable ORT profiling (writes JSON on close)
+        options.setSessionLogLevel(OrtSession.SessionOptions.LogLevel.WARNING)
+
+        // Load model bytes from assets
+        val modelBytes = context.assets.open(assetName).use { it.readBytes() }
+
+        session = env!!.createSession(modelBytes, options)
+
+        // Cache metadata
+        session?.let { s ->
+            inputName = s.inputNames.firstOrNull() ?: "input"
+            outputName = s.outputNames.firstOrNull() ?: "output"
+            val meta = s.inputInfo[inputName]?.info
+            inputShape = (meta as? ai.onnxruntime.TensorInfo)?.shape ?: longArrayOf()
+            Log.i(TAG, "Model loaded: backend=${mode.label}, " +
+                "input=$inputName shape=${inputShape.contentToString()}")
+        }
+    }
+
+    /**
+     * Run inference on float array input.
+     *
+     * @param input flat float array in NCHW order matching model input shape
+     * @return flat float array of model output
+     */
+    fun run(input: FloatArray): FloatArray {
+        val s = session ?: throw IllegalStateException("Model not loaded")
+        val e = env ?: throw IllegalStateException("Environment not ready")
+
+        // Reshape input according to cached shape
+        val shape = if (inputShape.isNotEmpty()) inputShape else {
+            // Infer from input size (assume 1, C, H, W with C=3)
+            val hw = input.size / 3
+            val h = kotlin.math.sqrt(hw.toDouble()).toInt()
+            longArrayOf(1L, 3L, h.toLong(), h.toLong())
+        }
+
+        val inputBuffer: FloatBuffer = ByteBuffer
+            .allocateDirect(input.size * 4)
+            .order(ByteOrder.nativeOrder())
+            .asFloatBuffer()
+            .put(input)
+        inputBuffer.rewind()
+
+        val inputTensor = OnnxTensor.createTensor(e, inputBuffer, shape)
+
+        return inputTensor.use { tensor ->
+            s.run(mapOf(inputName to tensor)).use { results ->
+                val outputTensor = results[0].value as OnnxTensor
+                outputTensor.floatBuffer.let { buf ->
+                    FloatArray(buf.remaining()).also { buf.get(it) }
+                }
+            }
+        }
+    }
+
+    /**
+     * Run inference multiple times and return timing stats.
+     */
+    fun benchmark(input: FloatArray, nRuns: Int = 20, nWarmup: Int = 5): BenchmarkResult {
+        require(isLoaded) { "Model not loaded" }
+
+        // Warmup
+        repeat(nWarmup) { run(input) }
+
+        // Timed runs
+        val timesMs = LongArray(nRuns)
+        for (i in 0 until nRuns) {
+            val t0 = System.nanoTime()
+            run(input)
+            timesMs[i] = (System.nanoTime() - t0) / 1_000_000
+        }
+
+        return BenchmarkResult(
+            backend = backend.label,
+            nRuns = nRuns,
+            meanMs = timesMs.average(),
+            medianMs = timesMs.sorted()[nRuns / 2].toDouble(),
+            minMs = timesMs.min().toDouble(),
+            maxMs = timesMs.max().toDouble(),
+            p95Ms = timesMs.sorted()[(nRuns * 0.95).toInt()].toDouble(),
+        )
+    }
+
+    override fun close() {
+        session?.close()
+        session = null
+        // Note: OrtEnvironment is a singleton; do not close it here
+        // unless this is the final teardown.
+        Log.i(TAG, "Session closed")
+    }
+}
+
+data class BenchmarkResult(
+    val backend: String,
+    val nRuns: Int,
+    val meanMs: Double,
+    val medianMs: Double,
+    val minMs: Double,
+    val maxMs: Double,
+    val p95Ms: Double,
+) {
+    override fun toString(): String =
+        "%-30s mean=%6.2fms median=%6.2fms min=%6.2f max=%6.2f p95=%6.2f".format(
+            backend, meanMs, medianMs, minMs, maxMs, p95Ms
+        )
+}
