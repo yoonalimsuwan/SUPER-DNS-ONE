@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 21 Cloud Training 
+# SUPER DNS ONE 21 With Cloud Training For One Ecosystem 
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
