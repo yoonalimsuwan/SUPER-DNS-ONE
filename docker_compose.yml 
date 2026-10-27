@@ -1,0 +1,43 @@
+# docker-compose.yml — Multi-GPU training orchestration
+version: "3.9"
+
+services:
+  training:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sesi/training:latest
+    container_name: sesi-training
+    # GPU access (requires nvidia-container-toolkit)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Mount data and checkpoints from host
+      - ./data:/workspace/data
+      - ./checkpoints:/workspace/checkpoints
+      - ./logs:/workspace/logs
+      - ./src:/workspace/src
+    environment:
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - MASTER_ADDR=localhost
+      - MASTER_PORT=29500
+      - WORLD_SIZE=4
+    # For multi-GPU DDP, override command:
+    # command: torchrun --nproc_per_node=4 train.py
+    command: python train.py --config configs/training.yaml
+    shm_size: '8gb'  # Shared memory for DataLoader workers
+
+  # ── Optional: TensorBoard for monitoring ──────────────────────────────
+  tensorboard:
+    image: tensorflow/tensorflow:2.15.0
+    container_name: sesi-tensorboard
+    command: tensorboard --logdir=/workspace/logs --host=0.0.0.0 --port=6006
+    ports:
+      - "6006:6006"
+    volumes:
+      - ./logs:/workspace/logs
