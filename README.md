@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 23 With Cloud Training For One Ecosystem And Quantum CFD
+# SUPER DNS ONE 23 With Cloud Training For One Ecosystem , Quantum Cosmology CFD
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
