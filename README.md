@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 27 With Cloud Training For One Ecosystem , Quantum Cosmology CFD With Disorder Interface And Double Exponential Interface , Advanced Adaptive Mesh Refinement (AMR)
+# SUPER DNS ONE 27 With Cloud Training For One Ecosystem , Quantum Cosmology CFD With Disorder Interface And Double Exponential Interface , Advanced Adaptive Mesh Refinement (AMR) And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
