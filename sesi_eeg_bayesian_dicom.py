@@ -1881,3 +1881,32 @@ def smoke_test():
     print(f"    Trial enrolled       : {status['trial_designer']['n_enrolled']}")
     print(f
 ```
+print(f"    Trial enrolled       : {status['trial_designer']['n_enrolled']}")
+    print(f"    DICOM de-identified  : {status['dicom_deidentifier']['n_deidentified']}")
+
+    print("\n" + "=" * 72)
+    print("  ⚠️  ETHICAL/REGULATORY FRAMEWORK")
+    print("  ─────────────────────────────────────────────────────────")
+    print("  • NOT MEDICAL DEVICES — research tools only")
+    print("  • IRB/IEC approval REQUIRED for human subject research")
+    print("  • Informed consent MANDATORY for all participants")
+    print("  • Clinical oversight by licensed professionals REQUIRED")
+    print("  • PNDC Axiom 3: Patient data is ULTRA-SENSITIVE")
+    print("  • Buddhist Ethics (อहिंสา): Never harm or exploit")
+    print("  • Taoist Ethics (无为): Support natural healing")
+    print("  • FDA 21 CFR Part 11 patterns for audit trail")
+    print("  • ICH-GCP E6(R2) compliance patterns")
+    print("=" * 72)
+    print("  HONEST SCOPE")
+    print("  • EEG source localization is RESEARCH-GRADE, not clinically validated")
+    print("  • Adaptive trials require PRE-SPECIFIED rules to avoid bias")
+    print("  • DICOM de-identification is APPROXIMATE; validation is essential")
+    print("  • All human subject research requires IRB/IEC approval")
+    print("  • Patient data handling requires HIPAA/GDPR compliance")
+    print("  • All thresholds are FREE DESIGN PARAMETERS")
+    print("=" * 72)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    smoke_test()
