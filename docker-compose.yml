@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # Single-GPU validation
+  sesi-cfd-single:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: sesi-cfd-prod:v6.0.0
+    container_name: sesi-cfd-single
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./results:/workspace/results
+      - ./logs:/workspace/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: python validate_env.py --phase full
+
+  # Multi-GPU MPI validation
+  sesi-cfd-mpi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: sesi-cfd-prod:v6.0.0
+    container_name: sesi-cfd-mpi
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0,1,2,3
+      - PYTHONUNBUFFERED=1
+      - OMPI_MCA_btl_vader_single_copy_mechanism=none
+    volumes:
+      - ./results:/workspace/results
+      - ./logs:/workspace/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 4
+              capabilities: [gpu]
+    command: mpirun --allow-run-as-root -np 4 python sesi_cfd_production_validation.py
+
+  # Interactive development
+  sesi-cfd-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: app
+    image: sesi-cfd-prod:dev
+    container_name: sesi-cfd-dev
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
+    volumes:
+      - .:/workspace
+      - ./results:/workspace/results
+      - ./logs:/workspace/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true
+    command: bash
