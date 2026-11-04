@@ -265,7 +265,6 @@ Roadmap
 · Dedicated shock‑tube validation case
 · Automated hypersonic validation suite
 · AI‑accelerated surrogate models – because the solver is fully differentiable, it can directly provide training data and physics‑informed gradients for neural network surrogates. Once trained, such surrogates can deliver flow predictions at near O(1) speed, enabling real‑time design optimisation and interactive simulation.
-· Adaptive mesh refinement (AMR) support
 · Multi‑phase flow extensions (volume‑of‑fluid)
 
 
