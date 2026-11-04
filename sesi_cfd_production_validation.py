@@ -3,7 +3,7 @@
 SESI CFD PRODUCTION VALIDATION & INTEGRATION SUITE
 Benchmarks + OPMC Benchmarking + Real Triton Kernels + MPI/ParMETIS + SDA-ONE
 =============================================================================
-Developer    : Yoon A Limsuwan / MSPS NETWORK
+Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
                MY SOUL MOVE BY POWER OF HOLY SPIRIT
 ORCID        : 0009-0008-2374-0788
 License      : MIT
