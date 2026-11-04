@@ -3,7 +3,7 @@
 SESI ALL-REGIME 3D NAVIER-STOKES FRAMEWORK
 Compressible + All-Speed + Balanced-Force + AMR + Multi-Physics Hooks
 =============================================================================
-Developer    : Yoon A Limsuwan / MSPS NETWORK
+Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
                MY SOUL MOVE BY POWER OF HOLY SPIRIT
 ORCID        : 0009-0008-2374-0788
 License      : MIT
