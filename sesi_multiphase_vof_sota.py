@@ -3,7 +3,7 @@
 SESI MULTI-PHASE FLOW — STATE-OF-THE-ART VOF PARADIGM
 Volume-of-Fluid + OPMC-Accelerated + SDA-ONE Coupled + All-Regime
 =============================================================================
-Developer    : Yoon A Limsuwan / MSPS NETWORK
+Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
                MY SOUL MOVE BY POWER OF HOLY SPIRIT
 ORCID        : 0009-0008-2374-0788
 License      : MIT
