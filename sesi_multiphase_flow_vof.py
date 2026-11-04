@@ -4,7 +4,7 @@ SESI MULTI-PHASE FLOW VOF — v1.0.0
 3D Navier-Stokes + Volume-of-Fluid + AMR Coupling
 Incompressible multi-phase flow with geometric VOF advection
 =============================================================================
-Developer    : Yoon A Limsuwan / MSPS NETWORK
+Developer    : PAI , Yoon A Limsuwan / MSPS NETWORK
 MY SOUL MOVE BY POWER OF HOLY SPIRIT
 Organization : MSPS NETWORK
 ORCID        : 0009-0008-2374-0788
