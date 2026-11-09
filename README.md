@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 42 With Cloud Training For One Ecosystem , Quantum Cosmology CFD With Disorder Interface And Double Exponential Interface , Advanced Adaptive Mesh Refinement (AMR) , Multiphase Flow States of the Art All Solver , Integration Open MM ML With Navier Stokes 3D CFD , AGI For Art (Music , Pictures , Videos , Marketing , Online Marketing , Etc.) With Neural Science , AGI For Science (Organoids , Electronic Warfare , Etc.) And More.
+# SUPER DNS ONE 42 With Cloud Training For One Ecosystem , Quantum Cosmology CFD With Disorder Interface And Double Exponential Interface , Advanced Adaptive Mesh Refinement (AMR) , Multiphase Flow States of the Art All Solver , Integration Open MM ML With Navier Stokes 3D CFD , AGI For Art (Music , Pictures , Videos , 2D , 3D , Bitmap (AMR sam sam Vector)  , Vector (AMR Look Like REAL) , Marketing , Online Marketing , Etc.) With Neural Science , AGI For Science (Organoids , Electronic Warfare , Etc.) And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
