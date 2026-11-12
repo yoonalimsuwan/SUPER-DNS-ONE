@@ -147,7 +147,7 @@ If you use this mathematical framework in your research, please cite:
   version = {1.0.0},
   year = {2026},
   license = {MIT},
-  url = {https://github.com/yoonalimsuwan/strategic-defense-system},
+  url = {https://github.com/yoonalimsuwan},
   orcid = {0009-0008-2374-0788}
 }
 ```
