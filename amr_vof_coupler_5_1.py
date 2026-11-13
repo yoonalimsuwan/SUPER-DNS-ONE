@@ -3,6 +3,10 @@
 =============================================================================
 AMR-VOF COUPLER v5.1 — MOF 3-Axis + Convergence Study
 =============================================================================
+Developer : PAI and Yoon A Limsuwan / MSPS NETWORK
+License   : MIT | Year: 2026
+
+
 Completes v5.0:
   §1  MOF Y-sweep     — full moment-flux tracking along axis 1
   §2  MOF Z-sweep     — full moment-flux tracking along axis 2
