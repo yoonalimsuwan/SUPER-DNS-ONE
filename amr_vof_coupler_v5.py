@@ -3,6 +3,10 @@
 =============================================================================
 AMR-VOF COUPLER v5.0 ADDON — MOF + WENO5 + RK3-SSP + MPI GhostExchange
 =============================================================================
+Developer : PAI and Yoon A Limsuwan / MSPS NETWORK
+License   : MIT | Year: 2026
+
+
 Drop-in modules for the v4.0 base.  Import into your project:
 
     from amr_vof_v4 import ConservativeVOFSolver, CutCellGeometry, ...
