@@ -3,6 +3,11 @@
 =============================================================================
 HYPERSONIC THERMOCHEMICAL NONEQUILIBRIUM — v3.1 LINE-BY-LINE RADIATION
 =============================================================================
+
+Developer : PAI and Yoon A Limsuwan / MSPS NETWORK 
+Licence : MIT
+Year : 2026
+
 NEW IN v3.1:
   [RAD1] Atomic lines: NIST ASD loader (จริง) + built-in fallback
   [RAD2] Molecular bands: rotational line synthesis จาก FC × HL
