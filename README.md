@@ -266,7 +266,123 @@ Roadmap
 · Automated hypersonic validation suite
 · AI‑accelerated surrogate models – because the solver is fully differentiable, it can directly provide training data and physics‑informed gradients for neural network surrogates. Once trained, such surrogates can deliver flow predictions at near O(1) speed, enabling real‑time design optimisation and interactive simulation.
 
+<div align="center">
 
+# ONE Ecosystem — DNS & Hypersonic Control Layer
+
+**PAI · Yoon A. Limsuwan · MSPS NETWORK**
+
+[![MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/status-research--preview-orange)](#status)
+
+</div>
+
+---
+
+## Philosophical Preamble
+
+> *The Tao is the Source. The Te is the Path. The Qi is the Proof.*
+>
+> *Confucius taught us to do good in this world — for Buddhism, Christianity,
+> and Taoism alike teach that good done in this life bears fruit in the next.*
+>
+> *In this world, "not killing enemies" does not mean "killing oneself."*
+>
+> *The Will of God is the Law of Karma. Buddhism, Taoism, and Confucianism —
+> though they do not utter His Name — by describing His attributes,
+> are already, implicitly, uttering His Name.*
+>
+> *Christ died upon the Cross to teach this: when struck on the left cheek,
+> turn also the right — so that we may hear the voice of the enemy who wishes us harm.*
+>
+> *He is the Lamb of God. God is not our food, and neither is the lamb.
+> This means: do not kill animals.*
+>
+> *Not even a single sparrow does God forget. Every hair upon our heads, He has counted.*
+>
+> *Even Aṅgulimāla could escape hell and enter Nirvana. But the better path is to
+> have done good all along. As Saint Dominic Savio said: "Rather death than sin."*
+>
+> *To speak of a person's attributes is already to speak their name.*
+
+**MY SOUL MOVE BY POWER OF HOLY SPIRIT**
+**What MSPS NETWORK SEE, Lord Buddha Knows.**
+
+*Full author preamble in `PHILOSOPHY.md`. The mathematics stands independently of it.*
+
+---
+
+## What This Is
+
+A **portable control layer** for CFD — not a replacement solver. Standard numerics
+(Fornberg, WENO-5, HLLC, PLIC/MOF, NASA-9, Park kinetics) with a decision layer that
+carries theorems.
+
+## Status
+
+| Item | Verified | Target |
+|---|---|---|
+| DNS $Re_L$ | $10^3$ (self-test) | $10^7$ → $N{=}98{,}304^3$, 45.6 PB, ~800k GPUs |
+| Species models | air5 / air7 / air11 / **air16** | air18 currently holds **18** species |
+| FD order | 2–22 moment-verified | 240 weights exact, **but slower** (below) |
+| Mach | ideal-gas shock tube | 20+ needs dual-energy + positivity limiter |
+| External validation | **none** | CEA2, EAST/X2/LENS, FIRE II |
+
+> Several modules **do not parse as uploaded.** Run `repair_five.py --apply --smoke` first.
+> Passing AST ≠ validated physics.
+
+## Three Real Contributions
+
+**1. Event-count bound.** $N(T) \le \dfrac{E_{\max}+D}{\Delta E_{\min}}$ for two-level
+hysteresis, where $D$ is the **actual** dissipation removed. An engineering guarantee
+on switching — same category as a CFL bound. **Not** Navier–Stokes regularity.
+
+**2. Order-240 is counterproductive.** Maximal-order central weights have the closed form
+
+$$w_k^{(M)} = \frac{(-1)^{k+1}}{k}\cdot\frac{\binom{2M}{M-k}}{\binom{2M}{M}} \;\xrightarrow[M\to\infty]{}\; \frac{(-1)^{k+1}}{k}$$
+
+— the Fourier spectral limit. Order 240 needs **120 ghost layers** (84 % halo at 857³/rank)
+and gains <20 % in usable $k\Delta$ over order 22. **Measured optimum: order 8–12, or spectral.**
+
+**3. Carpet-19 is not the NS operator.** Our own
+[Consolidated Revision](docs/Consolidated_Revision_Carpet-19.pdf), Corollary 3:
+$f \in D(A)$ nonconstant $\Rightarrow f^2 \notin D(A)$. The domain is **not an algebra**,
+so $u\cdot\nabla u$ cannot be formed there. Carpet contributes $\rho \ge 9/8$ energy
+normalisation and AMR priority only.
+
+## Quickstart
+
+```bash
+pip install numpy scipy torch
+python repair_five.py --dir . --apply --smoke
+cp one_core_v3-6.py one_core.py
+
+python super_dns_22.py --verify --order 22
+python dns_re_scaling_planner.py --plan 1e7 --re-kind Re_L
+python dns_re_scaling_planner.py --sweep --N 98304
+```
+
+$Re_L \approx Re_\lambda^2/15$. State which you mean: $Re_\lambda = 10^7$ implies
+$Re_L \approx 6.7\times10^{12}$ — no machine can hold it.
+
+## Scope
+
+$N \sim Re^{9/4}$ — no mathematics here changes that exponent. All timings depend on
+`cells_per_s_per_gpu` and `bytes_per_s_per_gpu`, which are **assumed until measured**.
+Radiation is tangent-slab, **not** for TPS sizing. No flight certification.
+
+**Coexist, not compete.** OpenFOAM keeps its discretisation; Basilisk keeps its octree.
+Add the control layer, keep the solver.
+
+---
+
+<div align="center">
+
+*Independent review: none yet. All heuristics labelled. All known defects in `README.md` §Errata.*
+
+**MY SOUL MOVE BY POWER OF HOLY SPIRIT**
+
+</div>
 
 
 Citing
