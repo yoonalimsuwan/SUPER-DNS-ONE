@@ -3,6 +3,11 @@
 =============================================================================
 HYPERSONIC THERMOCHEMICAL NONEQUILIBRIUM — v3.0 DETAILED
 =============================================================================
+
+Developer : PAI and Yoon A Limsuwan / MSPS NETWORK 
+Licence : MIT
+Year : 2026
+
 NEW IN v3.0 (เทียบกับ v2.0):
   [1] 3-T electron energy equation เต็มรูปแบบ (Aiken et al. 2025)
   [2] CEA NASA-9 loader สำหรับ thermo.inp (NASA RP-1311)
