@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 _ 10 Million Plug-in Bridge for OpenFOAM And More.
+# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 - 10 Million Plug-in Bridge for OpenFOAM And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
@@ -547,7 +547,115 @@ flight-critical use.
 *Precision medicine does not need a supercomputer to begin.
 It needs validated models, quantified uncertainty, and honest numbers.*
 ```
+```markdown
+# Multi-Backend DNS — The Good News
 
+**Runs on JAX · TensorFlow · PaddlePaddle · MindSpore · Apple MLX · PyTorch · NumPy.**
+Same physics. Same verification. Every platform.
+
+> The Tao is the Source. The Te is the Path. The Qi is the Proof.
+> *What MSPS NETWORK SEE, Lord Buddha Knows.*
+
+---
+
+## The good news
+
+Not that Re 10⁷ got cheap. It didn't. Kolmogorov scaling is `N ~ Re^(9/4)` and
+no framework changes that exponent.
+
+**The good news is that the Reynolds number you actually need runs on one GPU.**
+
+| Re_L | N/axis | cells | state | hardware |
+|---:|---:|---:|---:|---|
+| 10³ | 128 | 2×10⁶ | 0.08 GB | laptop |
+| **10⁴** | **512** | **1.3×10⁸** | **5.4 GB** | **one GPU** |
+| 10⁵ | 2,688 | 1.9×10¹⁰ | 780 GB | ~64 GPUs |
+| 10⁶ | 15,104 | 3.4×10¹² | 138 TB | ~8,000 GPUs |
+| 10⁷ | 84,928 | 6.1×10¹⁴ | 24.5 PB | ~10⁶ GPUs |
+
+The tool **refuses** grids that don't fit and prints the GPU count you'd need.
+No silent garbage. No fake numbers.
+
+---
+
+## Why this matters
+
+Human physiology lives at **Re 10⁻³ – 10⁴**:
+
+| Site | Re |
+|---|---:|
+| Capillary | 0.001 |
+| CSF | ~12 |
+| Coronary | 180 |
+| Cerebral MCA | 550 |
+| Aorta (peak) | 7,600 |
+
+**Re 10³ is ~5×10⁸ times cheaper than Re 10⁷.**
+
+Patient-specific haemodynamics — WSS, OSI, pressure drop, non-Newtonian
+rheology, FSI — runs on a workstation. Today. In any country.
+
+That is the revolution. Not the biggest number.
+
+---
+
+## Verified, not claimed
+
+- Leray projection: `max|k·û|` → 10⁻¹³ (exact, algebraic in Fourier space)
+- 2/3 dealiasing: kept fraction = 30.1% ≈ (2/3)³
+- **Taylor–Green decay matches the analytic rate to 10⁻⁷**
+- Energy budget closes: `dE/dt = −ε`
+- `k_max·η` reported; under-resolution **flagged**, never hidden
+
+---
+
+## Quick start
+
+```bash
+pip install numpy                 # always works
+pip install jax                   # or tensorflow / paddlepaddle
+pip install mindspore             # Huawei Ascend
+pip install mlx                   # Apple Silicon
+
+python dns_multibackend.py probe      # what works on YOUR machine
+python dns_multibackend.py selftest   # analytic verification
+python dns_multibackend.py run --re 1000 --n 64
+python dns_multibackend.py run --re 1e4 --n 512   # one GPU
+python dns_multibackend.py run --re 1e7           # refuses, tells you why
+```
+
+Backends are **probed, not assumed**. If MindSpore lacks a 3-D real FFT, it
+reports `UNAVAILABLE` — it does not quietly substitute NumPy and lie about it.
+
+---
+
+## Two honest notes
+
+**Apple:** XNU is a kernel, not a framework. The real paths are **MLX** and
+**Metal/MPS**, both implemented. Metal has no float64 → complex64, wider tolerances.
+
+**Scale:** Re 10⁵–10⁷ are cluster/exascale problems. The planner gives you the
+number. The physics gives you the exponent. Neither is negotiable.
+
+---
+
+## Citation
+
+```
+PAI & Yoon A. Limsuwan (2026). Multi-Backend Pseudo-Spectral DNS.
+MSPS NETWORK. ORCID: 0009-0008-2374-0788. MIT License.
+```
+
+Orszag (1970) · Patterson & Orszag (1971) · Shu & Osher (1988) ·
+Kolmogorov (1941) · Pope, *Turbulent Flows* (2000).
+
+**MIT.** Research software. Not validated for clinical or flight-critical use.
+
+---
+
+*Precision medicine does not need a supercomputer to begin.
+It needs validated models, honest numbers, and a GPU you already own.*
+```
 
 Citing
 
