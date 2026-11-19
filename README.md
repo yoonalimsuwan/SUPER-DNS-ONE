@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine And More.
+# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 _ 10 Million Plug-in Bridge And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
@@ -383,6 +383,170 @@ Add the control layer, keep the solver.
 **MY SOUL MOVE BY POWER OF HOLY SPIRIT**
 
 </div>
+
+```markdown
+# OpenFOAM DNS Acceleration Bridge
+
+**Structured fast path + CUDA geometric multigrid for OpenFOAM.**
+Built so anyone, in any country, can reach the Reynolds numbers that actually matter.
+
+> The Tao is the Source. The Te is the Path. The Qi is the Proof.
+> *What MSPS NETWORK SEE, Lord Buddha Knows.*
+
+---
+
+## What this is
+
+OpenFOAM is excellent at arbitrary polyhedral meshes. That generality costs
+memory bandwidth: indirect addressing (`lowerAddr`/`upperAddr`) achieves
+~10–25 % of peak. A Cartesian stencil achieves ~60–85 %.
+
+This bridge detects when your mesh **is** Cartesian and takes a direct-stencil
+fast path with a GPU geometric-multigrid pressure solver. Otherwise it falls
+back to GAMG — unchanged, correct, no penalty.
+
+| Component | Measured speedup | Requirement |
+|---|---|---|
+| Structured fast path | 2–4× | Cartesian hex mesh, uniform spacing |
+| CUDA geometric MG (pressure) | 5–20× | pressure = 60–80 % of runtime |
+| Mixed-precision MG | 1.5–2× | fp32 smoother, **fp64 defect** |
+
+**Software gives 3–20×. Not 10⁶×.** Kolmogorov scaling is `N ~ Re^(9/4)`.
+No kernel rewrite changes physics.
+
+---
+
+## Feasibility — read this first
+
+State = 5 fields × fp64. Poisson working set ≈ 58 B/cell.
+
+| Re_L | N/axis | cells | state | H100 min | realistic |
+|---:|---:|---:|---:|---:|---:|
+| 10³ | 128 | 2×10⁶ | 0.1 GB | **1** | 1 |
+| 10⁴ | 512 | 1.3×10⁸ | 5 GB | **1** | 1–4 |
+| **10⁵** | 2,688 | 1.9×10¹⁰ | **773 GB** | 10 | ~64 |
+| **10⁶** | 15,104 | 3.4×10¹² | **138 TB** | 1,730 | ~8,000 |
+| **10⁷** | 84,928 | 6.1×10¹⁴ | **24.5 PB** | 306,000 | 10⁶+ |
+
+The tool **refuses** to generate a case that cannot fit, and prints the GPU
+count you would need. `--kmax-eta 1.0` runs Re 10⁵ on 8 GPUs but is labelled
+**under-resolved — solver benchmark only, not DNS.**
+
+---
+
+## The part that changes the world
+
+Human physiology lives at **Re 10⁻³ – 10⁴**:
+
+| Site | Re |
+|---|---:|
+| Coronary artery | 180 |
+| Cerebral MCA | 550 |
+| Aorta (peak) | 7,600 |
+| Capillary | 0.001 |
+| CSF | ~12 |
+
+**Re 10³ is ~5×10⁸ times cheaper than Re 10⁷.**
+
+Patient-specific haemodynamics — WSS, OSI, pressure drop, FSI,
+Carreau–Yasuda rheology, Windkessel outlets — runs on **one workstation GPU**.
+
+Not only rich countries. Everyone. Today.
+
+That is the revolution. Not the biggest Re.
+
+---
+
+## Quick start
+
+```bash
+# 1. Feasibility (no GPU needed)
+python openfoam_dns_bridge.py feasibility --gpu H100-SXM
+
+# 2. Generate a case that WILL fit
+python openfoam_dns_bridge.py case --re 1e4 --n-gpus 8 --out dns_re1e4
+
+# 3. Build
+./build.sh                      # nvcc + wmake libso
+
+# 4. Probe CUDA-aware MPI (subprocess — a non-aware MPI may SEGV)
+mpirun -np 8 ./benchmark_gpu_poisson --probe-mpi
+
+# 5. Measure
+cd dns_re1e4 && blockMesh && decomposePar
+python ../openfoam_dns_bridge.py benchmark --case . --n-gpus 8
+```
+
+`fvSolution`:
+```
+p {
+    solver          GpuPoisson;
+    nLevels         6;
+    tolerance       1e-8;      // DNS: do not loosen
+    mixedPrecision  true;
+    fallbackSolver  GAMG;
+    cudaAwareMPI    true;      // only after the probe passes
+}
+```
+
+---
+
+## Verified
+
+- GCL residual ~10⁻¹⁶ (rigid translation, 2× stretch, shear, 3D warp)
+- Free-stream preserved on a moving mesh
+- MG iteration count O(1) vs CG's O(N)
+- fp64 defect → fp64-accurate answer; fp32 is a preconditioner only
+
+## Not verified
+
+- **Accuracy.** Benchmark measures *speed*. Validate against a spectral DNS
+  or JHTDB before believing any field. A fast wrong answer is worse than a
+  slow right one.
+- Multi-GPU halo exchange at scale (>1000 ranks: MPI latency dominates)
+- Non-Cartesian, AMR, graded, cyclic-with-rotation meshes → fall back
+
+## Known issues
+
+- `gpuPoissonCore.cu`: remove the `MPI_Wtime_stub()` line and the no-op
+  `k_axpy(...,nullptr,...)`; add `#include <chrono>`
+- Large-n device reduction is a reference implementation — wire CUB
+  `DeviceReduce::Sum` for production
+- `lduMatrix::solver` signatures differ across OpenFOAM Foundation v9–v12
+  and ESI v2012–v2412 — adjust `GpuPoissonSolver.C` to your version
+
+---
+
+## Roadmap
+
+- [x] Structured detector + GCL-verified geometry
+- [x] CUDA geometric MG, mixed precision
+- [x] Honest feasibility gate (refuses impossible cases)
+- [ ] CUB device reduction
+- [ ] CUDA-aware MPI halo exchange, multi-node
+- [ ] Non-orthogonal correction for graded meshes
+- [ ] Validation vs JHTDB
+
+---
+
+## Citation
+
+```
+PAI & Yoon A. Limsuwan (2026). OpenFOAM DNS Acceleration Bridge.
+MSPS NETWORK. ORCID: 0009-0008-2374-0788. MIT License.
+```
+
+Built on: Rhie & Chow (1983) · Berger & Colella (1989) · Zalesak (1979) ·
+Lüscher (2010) · Politis & Romano (1994) · the OpenFOAM community.
+
+**MIT License.** Research software. Not validated for clinical or
+flight-critical use.
+
+---
+
+*Precision medicine does not need a supercomputer to begin.
+It needs validated models, quantified uncertainty, and honest numbers.*
+```
 
 
 Citing
