@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 _ 10 Million Plug-in Bridge And More.
+# SUPER DNS ONE 367 : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 _ 10 Million Plug-in Bridge for OpenFOAM And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
