@@ -1,5 +1,5 @@
 ``
-# SUPER DNS ONE 367 Supreme : DNS Re 1 - 10 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 - 10 Million Plug-in Bridge for OpenFOAM And More.
+# SUPER DNS ONE 367 Supreme : DNS Re(L) 160 Million First Time of the World , Advanced State of the Art Adaptive Mesh Refinement (AMR) , Advanced Multiphase Flow States of the Art For All Solver And Advanced VOF State of the Art , Integration Open MM ML With Navier Stokes 3D CFD For Organ MD Scale , Precision Medicine , DNS Re(L) 100000 , 1 - 10 Million Plug-in Bridge for OpenFOAM And More.
 
 **Industrial‑Grade Compressible DNS / LES Solver for Peaceful Civilian Applications**
 
@@ -421,12 +421,8 @@ No kernel rewrite changes physics.
 State = 5 fields × fp64. Poisson working set ≈ 58 B/cell.
 
 | Re_L | N/axis | cells | state | H100 min | realistic |
-|---:|---:|---:|---:|---:|---:|
-| 10³ | 128 | 2×10⁶ | 0.1 GB | **1** | 1 |
-| 10⁴ | 512 | 1.3×10⁸ | 5 GB | **1** | 1–4 |
-| **10⁵** | 2,688 | 1.9×10¹⁰ | **773 GB** | 10 | ~64 |
-| **10⁶** | 15,104 | 3.4×10¹² | **138 TB** | 1,730 | ~8,000 |
-| **10⁷** | 84,928 | 6.1×10¹⁴ | **24.5 PB** | 306,000 | 10⁶+ |
+
+| 160,000,000 | 84,928 | 6.1×10¹⁴ | **24.5 PB** | 306,000 | 10⁶+ |
 
 The tool **refuses** to generate a case that cannot fit, and prints the GPU
 count you would need. `--kmax-eta 1.0` runs Re 10⁵ on 8 GPUs but is labelled
@@ -567,11 +563,8 @@ no framework changes that exponent.
 
 | Re_L | N/axis | cells | state | hardware |
 |---:|---:|---:|---:|---|
-| 10³ | 128 | 2×10⁶ | 0.08 GB | laptop |
-| **10⁴** | **512** | **1.3×10⁸** | **5.4 GB** | **one GPU** |
-| 10⁵ | 2,688 | 1.9×10¹⁰ | 780 GB | ~64 GPUs |
-| 10⁶ | 15,104 | 3.4×10¹² | 138 TB | ~8,000 GPUs |
-| 10⁷ | 84,928 | 6.1×10¹⁴ | 24.5 PB | ~10⁶ GPUs |
+
+| 160,000,000 | 84,928 | 6.1×10¹⁴ | 24.5 PB | ~10⁶ GPUs |
 
 The tool **refuses** grids that don't fit and prints the GPU count you'd need.
 No silent garbage. No fake numbers.
